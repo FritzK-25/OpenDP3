@@ -23,16 +23,31 @@ COPIED = ["src", "THIRD_PARTY_NOTICES.md", "THIRD_PARTY_LICENSES", "LICENSE"]
 IGNORED = shutil.ignore_patterns("__pycache__", "*.pyc", "*.egg-info")
 
 
+TEXT_SUFFIXES = {".py", ".md", ".txt", ".json", ".yaml", ".yml", ".toml", ".proto", ".pyi"}
+
+
+def read_normalized(path: Path) -> bytes:
+    """File bytes with CRLF folded to LF for text files.
+
+    A Windows checkout with autocrlf rewrites line endings, which must neither
+    count as drift nor change the recorded source digest.
+    """
+    data = path.read_bytes()
+    if path.suffix in TEXT_SUFFIXES or not path.suffix:
+        return data.replace(b"\r\n", b"\n")
+    return data
+
+
 def tree_files(base: Path) -> dict[str, bytes]:
     """Relative path -> bytes for every file under ``base`` that would be copied."""
     if base.is_file():
-        return {base.name: base.read_bytes()}
+        return {base.name: read_normalized(base)}
     found = {}
     for path in sorted(base.rglob("*")):
         relative = path.relative_to(base)
         if path.is_file() and not any(part == "__pycache__" or part.endswith(".egg-info")
                                       for part in relative.parts) and path.suffix != ".pyc":
-            found[relative.as_posix()] = path.read_bytes()
+            found[relative.as_posix()] = read_normalized(path)
     return found
 
 
