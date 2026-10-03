@@ -43,7 +43,9 @@ def tree_files(base: Path) -> dict[str, bytes]:
     if base.is_file():
         return {base.name: read_normalized(base)}
     found = {}
-    for path in sorted(base.rglob("*")):
+    # Order by the POSIX path string, not by Path: Windows compares paths
+    # case-insensitively part by part, which gave a different digest per OS.
+    for path in sorted(base.rglob("*"), key=lambda path: path.relative_to(base).as_posix()):
         relative = path.relative_to(base)
         if path.is_file() and not any(part == "__pycache__" or part.endswith(".egg-info")
                                       for part in relative.parts) and path.suffix != ".pyc":

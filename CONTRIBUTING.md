@@ -31,6 +31,15 @@ python scripts/sync_ha_app.py
 
 The test suite fails if the copy is out of date.
 
+To run the suite before every commit, install the pre-commit hook once:
+
+```bash
+python scripts/install_hooks.py
+```
+
+CI runs the same suite on Linux and Windows, builds the Windows executable
+with the pinned release environment, and builds the Home Assistant app image.
+
 The application version lives in one place, `src/opendp3/__init__.py`, and is
 changed with `scripts/bump_version.py`.
 

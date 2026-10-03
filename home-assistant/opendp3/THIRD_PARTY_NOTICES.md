@@ -45,8 +45,9 @@ https://download.qt.io/official_releases/qt/6.11/6.11.2/submodules/ and
 https://download.qt.io/official_releases/QtForPython/pyside6/PySide6-6.11.2-src/.
 Rebuilding with alternative compatible libraries is supported by the supplied
 source and packaging/build.ps1. Debugging modifications to LGPL libraries is
-not restricted. This local unsigned development build is not a signed public
-release; review dependency redistribution requirements before distributing it.
+not restricted. Release executables are built from the tagged source by the
+repository's public Release workflow and published with a SHA-256 file and a
+build provenance attestation. They are not code-signed.
 The vendored protocol research includes the upstream session derivation table;
 this is protocol material, not a user's password or captured session key.
 
