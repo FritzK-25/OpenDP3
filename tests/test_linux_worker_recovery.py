@@ -264,3 +264,96 @@ def test_address_persistence_failure_keeps_active_reader(tmp_path):
     assert recovery.await_count == 1
     assert original_discover.await_count == 1
     reader.close.assert_not_awaited()
+
+
+class FakeClock:
+    def __init__(self):
+        self.now = 0.0
+
+    def monotonic(self):
+        return self.now
+
+    def monotonic_ns(self):
+        return int(self.now * 1e9)
+
+
+class ClockedStop:
+    """A stop event whose waits advance the fake clock, ending after ``limit`` seconds."""
+
+    def __init__(self, clock, limit):
+        self.clock, self.limit = clock, limit
+
+    def is_set(self):
+        return self.clock.now >= self.limit
+
+    def wait(self, seconds):
+        self.clock.now += seconds
+        return self.is_set()
+
+
+class FakeProcess:
+    def __init__(self, *_args, **_kwargs):
+        self.returncode = None
+        self.signals = 0
+
+    def poll(self):
+        return self.returncode
+
+    def send_signal(self, _signal):
+        self.signals += 1
+        self.returncode = -2
+
+    def wait(self, timeout=None):
+        return self.returncode
+
+    def kill(self):
+        self.returncode = -9
+
+
+def run_supervisor(monkeypatch, frames, *, limit, retry=5):
+    """Supervise one collector for ``limit`` fake seconds; return its processes."""
+    clock = FakeClock()
+    spawned = []
+
+    def popen(*args, **kwargs):
+        spawned.append(FakeProcess())
+        return spawned[-1]
+
+    monkeypatch.setattr(run, "time", SimpleNamespace(monotonic=clock.monotonic,
+                                                     monotonic_ns=clock.monotonic_ns))
+    monkeypatch.setattr(run.subprocess, "Popen", popen)
+    monkeypatch.setattr(run, "newest_frame", lambda _database: frames(clock.now))
+    policy = run.FreshnessPolicy(Path("recordings.sqlite"), 30.0, "hci0")
+    run.supervise({"ecoflow-collector": ["collector"]}, ClockedStop(clock, limit),
+                  stagger=0, retry=retry, grace=0, policies={"ecoflow-collector": policy},
+                  freshness_check=1, recovery_spacing=0, recovery_grace=0)
+    return spawned
+
+
+def test_a_collector_that_never_records_is_restarted_once(monkeypatch):
+    spawned = run_supervisor(monkeypatch, lambda _now: None, limit=200)
+
+    # The first process is stopped by the start-up lease; its replacement,
+    # which also records nothing (a switched-off device looks the same), is
+    # left alone instead of being restarted every lease interval.
+    assert len(spawned) == 2
+    assert spawned[0].signals == 1
+    assert spawned[1].signals == 1  # only the final shutdown
+
+
+def test_a_collector_that_stops_recording_is_restarted(monkeypatch):
+    def frames(now):
+        # Valid frames for the first minute, then silence.
+        last = min(now, 60.0)
+        return int(last), int(last * 1e9)
+
+    spawned = run_supervisor(monkeypatch, frames, limit=120)
+
+    assert spawned[0].signals == 1
+    assert len(spawned) == 2
+
+
+def test_a_recording_collector_is_not_restarted(monkeypatch):
+    spawned = run_supervisor(monkeypatch, lambda now: (int(now), int(now * 1e9)), limit=200)
+
+    assert len(spawned) == 1
