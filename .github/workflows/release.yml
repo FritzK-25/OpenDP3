@@ -16,7 +16,7 @@ jobs:
   version:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Tag matches the package version
         run: |
           version=$(python3 packaging/project_version.py)
@@ -37,13 +37,13 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: windows-executable
       - name: Hash matches the executable
         run: sha256sum --check OpenDP3-*.exe.sha256
       - name: Attest build provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: OpenDP3-*.exe
       - name: Draft release
