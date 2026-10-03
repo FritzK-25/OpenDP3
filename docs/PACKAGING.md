@@ -136,5 +136,6 @@ The first startup can take several seconds while libraries unpack. Windows
 may show a publisher or reputation warning for this unsigned build. Do not
 disable security protections. This local test is not certification on every
 Windows PC, and packaging does not complete the eight-hour or offline
-hardware qualification. Review dependency redistribution requirements before
-publishing this development build to others.
+hardware qualification. Published executables come from the Release workflow,
+not from a local build; [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md)
+lists the licences that apply when redistributing one.
