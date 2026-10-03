@@ -8,6 +8,16 @@ bug reports with a minimal description, and fixes with a test.
 - **Never post private identifiers.** No device serials, Bluetooth addresses,
   account IDs, MQTT credentials or raw recordings in issues, pull requests or
   test fixtures. Use obviously fake values such as `AA:BB:CC:DD:EE:FF`.
+  `python scripts/privacy_check.py` scans the repository for email
+  addresses, private IP addresses, Bluetooth addresses, serial numbers and
+  local host names; the test suite runs it, and a new fake value goes in its
+  allowlist.
+- **Commit with your GitHub no-reply email.** Commit authors are public. CI
+  rejects new commits whose author or committer email is not a
+  `@users.noreply.github.com` address. Set it once per clone with
+  `git config user.email <id>+<login>@users.noreply.github.com`, and turn on
+  "Keep my email addresses private" in your GitHub email settings so merges
+  made on github.com use it too.
 - **Do not weaken the control gate.** Control stays off by default, and the
   outbound allowlist only grows with a test proving the exact bytes sent.
 - **Say what you ran.** In a pull request, quote the command and its output.
