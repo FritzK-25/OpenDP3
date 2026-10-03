@@ -5,7 +5,9 @@ LABEL io.hass.version="${BUILD_VERSION}" io.hass.type="app" io.hass.arch="${BUIL
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/opt/opendp3/src
 WORKDIR /opt/opendp3
 COPY requirements-headless.txt ./
-RUN pip install --no-cache-dir -r requirements-headless.txt
+# Every package, transitive ones included, is pinned with hashes; see
+# requirements-headless.in. An unpinned or altered package fails the build.
+RUN pip install --no-cache-dir --require-hashes -r requirements-headless.txt
 COPY src ./src
 COPY SOURCE-PROVENANCE.json /opt/opendp3/SOURCE-PROVENANCE.json
 COPY run.py /opt/opendp3/run.py
