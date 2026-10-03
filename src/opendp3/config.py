@@ -18,8 +18,19 @@ from . import dpapi
 # Windows folders".
 _MQTT_PASSWORD_DPAPI_KEY = "mqtt_password_dpapi"
 
+# The platform data directory was named after the project's old name. An
+# install that already has one keeps using it, so its setup, recordings and
+# DPAPI-protected password stay where they are; only a fresh install gets the
+# new name. Nothing is moved, because a running recorder may hold the database.
+DATA_DIR_NAME = "OpenPowerstation"
+LEGACY_DATA_DIR_NAME = "OpenDP3"
+
 def data_dir() -> Path:
-    return user_data_path("OpenDP3", appauthor=False)
+    current = user_data_path(DATA_DIR_NAME, appauthor=False)
+    legacy = user_data_path(LEGACY_DATA_DIR_NAME, appauthor=False)
+    if not current.exists() and legacy.is_dir():
+        return legacy
+    return current
 
 @dataclass
 class Config:
