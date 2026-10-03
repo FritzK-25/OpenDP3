@@ -1,5 +1,5 @@
 """DP3 output-state telemetry used to back the Home Assistant switches."""
-from opendp3.decoder import FIELD_MAP, decode_raw
+from openpowerstation.decoder import FIELD_MAP, decode_raw
 
 
 def test_ac_output_flow_fields_are_normalized(packet):

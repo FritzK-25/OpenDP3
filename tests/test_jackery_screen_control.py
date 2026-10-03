@@ -3,9 +3,9 @@ import json
 
 import pytest
 
-from opendp3.jackery import (JACKERY_CONTROLS, jackery_control_command,
+from openpowerstation.jackery import (JACKERY_CONTROLS, jackery_control_command,
                               jackery_control_readback_matches, jackery_control_value)
-from opendp3.jackery_fields import map_properties
+from openpowerstation.jackery_fields import map_properties
 
 
 def command_body(command: str) -> tuple[int, int, dict]:

@@ -9,7 +9,7 @@ Run as a script to print the version, which is how build.ps1 consumes it.
 import ast
 from pathlib import Path
 
-SOURCE = Path(__file__).resolve().parent.parent / "src" / "opendp3" / "__init__.py"
+SOURCE = Path(__file__).resolve().parent.parent / "src" / "openpowerstation" / "__init__.py"
 
 
 def read(name: str = "__version__", source: Path | None = None) -> str:

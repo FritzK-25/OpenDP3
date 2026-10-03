@@ -6,5 +6,5 @@ if not exist ".venv\Scripts\pythonw.exe" (
   pause
   exit /b 1
 )
-start "" "%~dp0.venv\Scripts\pythonw.exe" -m opendp3 --data-dir "%~dp0data" gui
+start "" "%~dp0.venv\Scripts\pythonw.exe" -m openpowerstation --data-dir "%~dp0data" gui
 

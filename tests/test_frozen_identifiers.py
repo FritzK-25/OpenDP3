@@ -9,9 +9,9 @@ needs a migration plan, not a test update.
 """
 from pathlib import Path
 
-from opendp3.bridge import (HA_ID_PREFIX, Bridge, control_topic,
+from openpowerstation.bridge import (HA_ID_PREFIX, Bridge, control_topic,
                             discovery_payloads)
-from opendp3.config import Config
+from openpowerstation.config import Config
 
 ROOT = Path(__file__).resolve().parents[1]
 DEV_ID = "0123456789ab"

@@ -8,12 +8,12 @@ import contextlib
 import json
 from types import SimpleNamespace
 
-from opendp3.config import Config
-from opendp3.jackery import JACKERY_CONTROLS
-from opendp3.jackery_bridge import JackeryBridge, discovery_payloads
-from opendp3.jackery_fields import map_properties
-from opendp3.recorder import Recorder
-from opendp3.storage import Store
+from openpowerstation.config import Config
+from openpowerstation.jackery import JACKERY_CONTROLS
+from openpowerstation.jackery_bridge import JackeryBridge, discovery_payloads
+from openpowerstation.jackery_fields import map_properties
+from openpowerstation.recorder import Recorder
+from openpowerstation.storage import Store
 
 SERIAL = "123456789012345"
 
@@ -86,7 +86,7 @@ def test_the_bridge_backfill_keeps_the_recorded_transport(tmp_path, monkeypatch)
     have recorded a Jackery account as the source of a reading that came off the
     radio. The label never reaches MQTT, but it must not be wrong in the record.
     """
-    import opendp3.jackery_bridge as module
+    import openpowerstation.jackery_bridge as module
     captured = {}
     original = module.state_payload
 
@@ -135,14 +135,14 @@ def test_enabled_jackery_bridge_announces_and_queues_controls(tmp_path):
 
 def test_jackery_control_queue_is_bounded_without_collector(tmp_path, monkeypatch):
     """The recorder drains only while attached, so presses must not pile up."""
-    from opendp3.bridge import CONTROL_QUEUE_MAX_FILES
+    from openpowerstation.bridge import CONTROL_QUEUE_MAX_FILES
     database = tmp_path / "jackery.sqlite"
     config = Config(address="AA:BB:CC:DD:EE:FF", serial=SERIAL, user_id="0",
                     mqtt_host="broker.invalid", allow_control=True)
     bridge = JackeryBridge(config, database, serial=SERIAL, client=FakeClient())
     total = CONTROL_QUEUE_MAX_FILES + 25
     ticks = iter(10**18 + index for index in range(total))
-    monkeypatch.setattr("opendp3.bridge.time.time_ns", lambda: next(ticks))
+    monkeypatch.setattr("openpowerstation.bridge.time.time_ns", lambda: next(ticks))
 
     for index in range(total):
         bridge.queue_control("jackery_ac_output", "ON" if index == total - 1 else "OFF")
@@ -216,7 +216,7 @@ def test_jackery_reannounces_after_home_assistant_restart(tmp_path):
 
 
 def test_jackery_periodically_refreshes_discovery(tmp_path, monkeypatch):
-    import opendp3.jackery_bridge as module
+    import openpowerstation.jackery_bridge as module
     client = FakeClient()
     config = Config(address="AA:BB:CC:DD:EE:FF", serial=SERIAL, user_id="0",
                     mqtt_host="broker.invalid", allow_control=True)
@@ -279,7 +279,7 @@ def test_a_recorder_that_died_stops_reading_as_live(tmp_path):
     those stale numbers would otherwise look second-fresh in Home Assistant.
     """
     import time as clock
-    from opendp3.jackery_bridge import STALE_SECONDS, state_payload
+    from openpowerstation.jackery_bridge import STALE_SECONDS, state_payload
     path = tmp_path / "jackery.sqlite"
     with record_ble_observation(path):
         payload, _ = published_state(path)

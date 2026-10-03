@@ -8,14 +8,14 @@ from types import SimpleNamespace
 import pytest
 import portalocker
 
-from opendp3.bridge import (
+from openpowerstation.bridge import (
     Bridge, CONTROL_FEEDBACK_FIELDS, CONTROLS, bridge_lock, collector_state, device_id,
     discovery_payloads, entities, state_payload,
 )
-from opendp3.config import Config
-from opendp3.decoder import FIELDS
-from opendp3.queries import latest
-from opendp3.recorder import Recorder
+from openpowerstation.config import Config
+from openpowerstation.decoder import FIELDS
+from openpowerstation.queries import latest
+from openpowerstation.recorder import Recorder
 from conftest import add
 
 SERIAL = "MR51ABCDEFGHIJKL"
@@ -241,7 +241,7 @@ def test_finished_session_reports_its_own_status(evidence, packet):
 
 
 def test_no_sessions_yields_nothing_to_publish(tmp_path):
-    from opendp3.storage import Store
+    from openpowerstation.storage import Store
     with Store(tmp_path / "empty.sqlite", reserve_bytes=0) as store:
         assert latest(store.path) == {}
 
@@ -365,7 +365,7 @@ def test_an_expired_field_is_logged_while_the_stream_stays_healthy(evidence, pac
     bridge, _ = bridge_with_fake(store.path, stale_seconds=45)
     # "Now" is one second after the newest frame: the stream is fresh, the SOC
     # observation is 101 seconds old.
-    import opendp3.bridge as module
+    import openpowerstation.bridge as module
     real_time_ns = module.time.time_ns
     module.time.time_ns = lambda: recorder.start_utc + int(101e9)
     try:
@@ -418,7 +418,7 @@ def test_a_telemetry_outage_is_not_logged_as_a_fresh_link(evidence, packet, caps
     which reset frame age. Read alone, frame age said the link was healthy and
     one property had aged out, when in fact the whole stream was down.
     """
-    from opendp3.vendor.packet import Packet
+    from openpowerstation.vendor.packet import Packet
     store, recorder = evidence
     add(recorder, packet(seq=1, bms_batt_soc=80, pow_out_sum_w=120), 0)
     # 120s later: a frame arrives, but it carries no measurement at all.
@@ -426,7 +426,7 @@ def test_a_telemetry_outage_is_not_logged_as_a_fresh_link(evidence, packet, caps
     add(recorder, housekeeping, 120)
 
     bridge, _ = bridge_with_fake(store.path, stale_seconds=45)
-    import opendp3.bridge as module
+    import openpowerstation.bridge as module
     real_time_ns = module.time.time_ns
     module.time.time_ns = lambda: recorder.start_utc + int(126e9)
     try:

@@ -44,7 +44,7 @@ CI runs the same suite on Linux and Windows, builds the Windows executable
 with the pinned release environment, and builds the Home Assistant app image
 for amd64 and aarch64.
 
-The application version lives in one place, `src/opendp3/__init__.py`, and is
+The application version lives in one place, `src/openpowerstation/__init__.py`, and is
 changed with `scripts/bump_version.py`.
 
 ## Licence

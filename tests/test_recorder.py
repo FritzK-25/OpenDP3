@@ -1,12 +1,12 @@
 import json
 import pytest
 from conftest import add
-from opendp3.decoder import decode_raw
-from opendp3.protocol import auth_packet
-from opendp3.queries import snapshot,plot_arrays
-from opendp3.storage import Store,StorageError,read_db
-from opendp3.validation import verify_recording
-from opendp3.vendor.packet import Packet
+from openpowerstation.decoder import decode_raw
+from openpowerstation.protocol import auth_packet
+from openpowerstation.queries import snapshot,plot_arrays
+from openpowerstation.storage import Store,StorageError,read_db
+from openpowerstation.validation import verify_recording
+from openpowerstation.vendor.packet import Packet
 
 def test_presence_zero_and_partial_packets(packet):
     decoded = decode_raw(packet(bms_max_cell_temp=0,cms_batt_soc=0))
@@ -29,7 +29,7 @@ def test_only_decoded_measurements_renew_the_session_lease(evidence,packet):
 def test_unknown_message_and_field_retained(evidence,packet):
     store,rec=evidence
     from google.protobuf.internal.encoder import _VarintBytes
-    from opendp3.protocol import parse_packet
+    from openpowerstation.protocol import parse_packet
     p = parse_packet(packet(bms_max_cell_temp=23))
     p.payload += _VarintBytes((8000<<3)|0)+_VarintBytes(777)
     raw=p.to_bytes(); add(rec,raw,0)
@@ -88,7 +88,7 @@ def test_nonfinite_is_preserved_not_normalized(evidence,packet):
 
 def test_raw_committed_even_if_decoder_crashes(evidence,packet,monkeypatch):
     store,rec=evidence
-    monkeypatch.setattr("opendp3.recorder.decode",lambda _:(_ for _ in ()).throw(RuntimeError("decoder fault")))
+    monkeypatch.setattr("openpowerstation.recorder.decode",lambda _:(_ for _ in ()).throw(RuntimeError("decoder fault")))
     raw=packet(bms_max_cell_temp=23)
     with pytest.raises(RuntimeError): add(rec,raw,0)
     with read_db(store.path) as reader:
@@ -120,7 +120,7 @@ def test_retention_preserves_pinned_raw_and_measurements(evidence,packet):
     assert store.conn.execute("SELECT COUNT(*) FROM frames").fetchone()[0]==0
 
 def test_ingest_respects_unlimited_retention(tmp_path,packet):
-    from opendp3.recorder import Recorder
+    from openpowerstation.recorder import Recorder
     with Store(tmp_path/"retain.sqlite",reserve_bytes=0) as store:
         rec=Recorder(store,utc_ns=1_000_000_000_000_000_000,mono_ns=0,retain_days=None)
         add(rec,packet(seq=1,bms_max_cell_temp=23),0)
@@ -137,7 +137,7 @@ def test_overlapping_windows_merge_and_extend(evidence):
 
 def test_exclusive_writer_and_recovery(tmp_path,packet):
     path=tmp_path/"a.sqlite"
-    from opendp3.recorder import Recorder
+    from openpowerstation.recorder import Recorder
     with Store(path,reserve_bytes=0) as s:
         r=Recorder(s,utc_ns=1_000_000_000_000_000_000,mono_ns=0)
         add(r,packet(bms_max_cell_temp=23),0)
@@ -149,7 +149,7 @@ def test_disk_exhaustion_explicit(evidence,packet,monkeypatch):
     store,rec=evidence
     from types import SimpleNamespace
     store.reserve_bytes=128
-    monkeypatch.setattr("opendp3.storage.shutil.disk_usage",lambda _:SimpleNamespace(free=0))
+    monkeypatch.setattr("openpowerstation.storage.shutil.disk_usage",lambda _:SimpleNamespace(free=0))
     with pytest.raises(StorageError): add(rec,packet(bms_max_cell_temp=22),0)
     assert store.conn.execute("SELECT COUNT(*) FROM frames").fetchone()[0]==0
 

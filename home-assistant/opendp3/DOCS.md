@@ -46,7 +46,7 @@ keep it private and never commit it. Fields:
 }
 ```
 
-- `address` and `serial` come from `opendp3 scan` on any machine with
+- `address` and `serial` come from `openpowerstation scan` on any machine with
   Bluetooth, or from the Windows application's setup page.
 - `user_id` is your EcoFlow account's numeric user ID.
 - Use a broker account created only for this, so the stored password grants

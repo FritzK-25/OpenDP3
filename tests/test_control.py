@@ -10,14 +10,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from opendp3.bridge import (CONTROL_FEEDBACK_FIELDS, CONTROL_QUEUE_MAX_FILES, CONTROLS, Bridge,
+from openpowerstation.bridge import (CONTROL_FEEDBACK_FIELDS, CONTROL_QUEUE_MAX_FILES, CONTROLS, Bridge,
                             control_discovery, control_topic, discovery_payloads)
-from opendp3.config import Config
-from opendp3.protocol import (CONTROL_CMD_ID, CONTROL_FIELDS, CONTROL_HEADER, OutboundGate,
+from openpowerstation.config import Config
+from openpowerstation.protocol import (CONTROL_CMD_ID, CONTROL_FIELDS, CONTROL_HEADER, OutboundGate,
                               PolicyError, auth_packet, control_packet)
-from opendp3.runtime import CONTROL_MAX_AGE, Service
-from opendp3.vendor.packet import Packet
-from opendp3.vendor.pb import mr521_pb2
+from openpowerstation.runtime import CONTROL_MAX_AGE, Service
+from openpowerstation.vendor.packet import Packet
+from openpowerstation.vendor.pb import mr521_pb2
 
 SERIAL = "MR51123456789012"
 
@@ -296,7 +296,7 @@ def test_bridge_control_queue_is_bounded_without_collector(tmp_path, monkeypatch
     bridge = Bridge(make_config(allow_control=True), database, client=None)
     total = CONTROL_QUEUE_MAX_FILES + 25
     ticks = iter(10**18 + index for index in range(total))
-    monkeypatch.setattr("opendp3.bridge.time.time_ns", lambda: next(ticks))
+    monkeypatch.setattr("openpowerstation.bridge.time.time_ns", lambda: next(ticks))
 
     for index in range(total):
         key = "cfg_hv_ac_out_open" if index % 2 == 0 else "cfg_lv_ac_out_open"
@@ -315,7 +315,7 @@ def test_bounded_queue_still_delivers_a_fresh_surviving_command(tmp_path, monkey
     bridge = Bridge(make_config(allow_control=True), database, client=None)
     total = CONTROL_QUEUE_MAX_FILES + 3
     ticks = iter(10**18 + index for index in range(total))
-    monkeypatch.setattr("opendp3.bridge.time.time_ns", lambda: next(ticks))
+    monkeypatch.setattr("openpowerstation.bridge.time.time_ns", lambda: next(ticks))
     for index in range(total):
         bridge.queue_control("cfg_hv_ac_out_open", "ON" if index == total - 1 else "OFF")
 
