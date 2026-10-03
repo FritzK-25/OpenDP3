@@ -54,22 +54,44 @@ jobs:
     with:
       run-tests: ${{ github.event_name != 'pull_request' }}
 
+  # Every architecture config.yaml ships. aarch64 (the Raspberry Pi) builds and
+  # runs under QEMU emulation on the x86 runner, so an install that fails only
+  # on arm64 shows up here rather than on a user's device.
   home-assistant-app:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            machine: x86_64
+          - arch: aarch64
+            platform: linux/arm64
+            machine: aarch64
+    name: home-assistant-app (${{ matrix.arch }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+      - name: Emulate arm64
+        if: matrix.arch != 'amd64'
+        uses: docker/setup-qemu-action@v4
+        with:
+          platforms: arm64
       - name: Build the app image
         run: |
           version=$(python3 packaging/project_version.py)
-          docker build home-assistant/opendp3 --tag opendp3-app:ci \
-            --build-arg BUILD_VERSION="$version" --build-arg BUILD_ARCH=amd64
+          docker build home-assistant/opendp3 --platform ${{ matrix.platform }} --tag opendp3-app:ci \
+            --build-arg BUILD_VERSION="$version" --build-arg BUILD_ARCH=${{ matrix.arch }}
       - name: Headless entry points import inside the image
         run: |
-          docker run --rm opendp3-app:ci python -c "
+          docker run --rm --platform ${{ matrix.platform }} -e EXPECTED_MACHINE=${{ matrix.machine }} \
+            opendp3-app:ci python -c "
           import json, opendp3, opendp3.cli, opendp3.bridge, opendp3.jackery_bridge, opendp3.recorder
           import run, linux_worker, bluetooth_status
           provenance = json.load(open('/opt/opendp3/SOURCE-PROVENANCE.json'))
           assert provenance['version'] == opendp3.__version__, provenance
-          print('OpenDP3', opendp3.__version__, 'image OK')
+          import os, platform
+          assert platform.machine() == os.environ['EXPECTED_MACHINE'], platform.machine()
+          print('OpenDP3', opendp3.__version__, platform.machine(), 'image OK')
           "
