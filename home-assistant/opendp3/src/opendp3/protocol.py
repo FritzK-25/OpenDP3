@@ -1,11 +1,9 @@
 """Read-only DP3 transport policy and framing; adapted from pinned ha-ef-ble."""
 import hashlib
-import struct
 from dataclasses import dataclass
 
 from .vendor.crc import crc8, crc16
 from .vendor.packet import Packet
-from .vendor.encpacket import EncPacket
 from .vendor.frame_assembler import SimplePacketAssembler
 from .vendor import keydata
 

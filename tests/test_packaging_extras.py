@@ -210,7 +210,7 @@ def test_each_guard_names_an_extra_that_supplies_what_it_is_missing():
 
 def test_production_requirements_match_the_core_dependencies():
     """home-assistant/opendp3 pins the same set the package declares, and nothing more."""
-    headless = PROJECT / "home-assistant" / "opendp3" / "requirements-headless.txt"
+    headless = PROJECT / "home-assistant" / "opendp3" / "requirements-headless.in"
     pinned = requirement_names(
         line for line in headless.read_text(encoding="utf-8").splitlines()
         if line.strip() and not line.strip().startswith("#")

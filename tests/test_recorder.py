@@ -1,5 +1,4 @@
 import json
-import sqlite3
 import pytest
 from conftest import add
 from opendp3.decoder import decode_raw

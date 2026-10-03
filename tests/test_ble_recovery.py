@@ -412,7 +412,7 @@ async def test_the_jackery_collector_records_the_failure_before_reattaching(tmp_
 
     reader = StallingReader()
 
-    async def discover_reader(_timeout):
+    async def discover_reader(_timeout, _serial=None):
         return reader
 
     monkeypatch.setattr("opendp3.jackery.discover_reader", discover_reader)

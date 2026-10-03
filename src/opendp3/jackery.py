@@ -6,7 +6,6 @@ but discovery is the safe first step: it does not connect or write anything.
 """
 from dataclasses import dataclass, replace
 import asyncio
-import contextlib
 import base64
 from datetime import datetime
 import json
@@ -668,8 +667,12 @@ async def read_status(identity: Identity, timeout: float = 8) -> dict:
         return await reader.read(timeout)
 
 
-async def discover_reader(timeout: float = 30) -> LocalReader:
+async def discover_reader(timeout: float = 30, serial: str | None = None) -> LocalReader:
     """Discover an Explorer and open a session while its advertisement is live.
+
+    With ``serial``, advertisements from any other Explorer are ignored, so a
+    neighbouring unit is never attached to (taking its single BLE client slot)
+    only to be rejected afterwards.
 
     The Explorer's connectable advertising window can end as soon as an attach
     is attempted.  On WinRT, stopping the watcher before opening GATT can also
@@ -691,6 +694,8 @@ async def discover_reader(timeout: float = 30) -> LocalReader:
         # non-connectable.  The AEP-id/FromIdAsync fallback below is deliberately
         # meant to bypass that lookup, so let it qualify the decoded Explorer
         # instead of filtering the packet before the fallback can run.
+        if serial is not None and (parsed is None or parsed.serial != serial):
+            return
         if parsed and parsed.model_code == 8 and parsed.encryption_key:
             ready.set_result(Identity(device.address.upper(), device.name or "",
                                       parsed.serial, parsed.model_code,

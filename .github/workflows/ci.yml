@@ -24,8 +24,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
           cache: pip
@@ -44,6 +44,21 @@ jobs:
       - name: Home Assistant app copy is current
         run: python scripts/sync_ha_app.py --check
 
+  # Pyflakes-level checks (unused imports and variables, undefined names). The
+  # rule set and exclusions live in pyproject.toml under [tool.ruff].
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Ruff
+        run: |
+          python -m pip install ruff==0.16.10
+          ruff check --output-format=github .
+
   # The release build, with the release's pinned environment. Runs here so a
   # broken build or a lockfile/pyproject mismatch shows up before tagging.
   # On pull requests it skips its own test pass: the test job above already
@@ -54,22 +69,60 @@ jobs:
     with:
       run-tests: ${{ github.event_name != 'pull_request' }}
 
-  home-assistant-app:
+  # Every architecture config.yaml ships. aarch64 (the Raspberry Pi) builds and
+  # runs under QEMU emulation on the x86 runner, so an install that fails only
+  # on arm64 shows up here rather than on a user's device.
+  home-assistant-image:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+            machine: x86_64
+          - arch: aarch64
+            platform: linux/arm64
+            machine: aarch64
+    name: home-assistant-image (${{ matrix.arch }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Emulate arm64
+        if: matrix.arch != 'amd64'
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
       - name: Build the app image
         run: |
           version=$(python3 packaging/project_version.py)
-          docker build home-assistant/opendp3 --tag opendp3-app:ci \
-            --build-arg BUILD_VERSION="$version" --build-arg BUILD_ARCH=amd64
+          docker build home-assistant/opendp3 --platform ${{ matrix.platform }} --tag opendp3-app:ci \
+            --build-arg BUILD_VERSION="$version" --build-arg BUILD_ARCH=${{ matrix.arch }}
       - name: Headless entry points import inside the image
         run: |
-          docker run --rm opendp3-app:ci python -c "
+          docker run --rm --platform ${{ matrix.platform }} -e EXPECTED_MACHINE=${{ matrix.machine }} \
+            opendp3-app:ci python -c "
           import json, opendp3, opendp3.cli, opendp3.bridge, opendp3.jackery_bridge, opendp3.recorder
           import run, linux_worker, bluetooth_status
           provenance = json.load(open('/opt/opendp3/SOURCE-PROVENANCE.json'))
           assert provenance['version'] == opendp3.__version__, provenance
-          print('OpenDP3', opendp3.__version__, 'image OK')
+          import os, platform
+          assert platform.machine() == os.environ['EXPECTED_MACHINE'], platform.machine()
+          print('OpenDP3', opendp3.__version__, platform.machine(), 'image OK')
           "
+
+  # One stable check name over the per-architecture builds, so branch
+  # protection can require "home-assistant-app" however many architectures
+  # the matrix grows. Fails unless every image build succeeded.
+  home-assistant-app:
+    needs: home-assistant-image
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every architecture built and imported
+        env:
+          RESULT: ${{ needs.home-assistant-image.result }}
+        run: |
+          echo "home-assistant-image: $RESULT"
+          test "$RESULT" = success

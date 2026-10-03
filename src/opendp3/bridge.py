@@ -96,6 +96,36 @@ def field_age_summary(reading, now_ns, keys=LOGGED_FIELD_AGES):
     return " ".join(parts)
 
 
+def enqueue_control(directory, name, request):
+    """Hand one control request to a collector as a file, keeping the queue bounded.
+
+    The collector is the only consumer. If it is absent, discard the oldest
+    requests before accepting a new one, so an unreachable device cannot turn
+    repeated MQTT presses into unbounded disk growth.
+    """
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        pending = sorted(directory.glob("*.json"))
+        excess = max(0, len(pending) - (CONTROL_QUEUE_MAX_FILES - 1))
+        for old in pending[:excess]:
+            with contextlib.suppress(OSError):
+                old.unlink()
+        # If filesystem errors prevented enough pruning, fail closed by dropping
+        # the new request instead of growing the queue beyond its hard ceiling.
+        if sum(1 for _ in directory.glob("*.json")) >= CONTROL_QUEUE_MAX_FILES:
+            return
+        # Named uniquely and renamed into place, so the collector never reads
+        # a half-written request.
+        stem = f"{time.time_ns()}-{name}"
+        tmp = directory / (stem + ".tmp")
+        tmp.write_text(json.dumps(request), encoding="utf-8")
+        tmp.replace(directory / (stem + ".json"))
+    except OSError:
+        # A queued command that cannot be written is dropped, not retried:
+        # a stale output command is worse than a missing one.
+        pass
+
+
 def bridge_lock(database):
     """Return the single-instance lock shared by every bridge launcher."""
     return portalocker.Lock(str(Path(database).resolve().parent / "bridge.lock"), timeout=0)
@@ -421,31 +451,8 @@ class Bridge:
             return
         if key not in {name for name, _ in CONTROLS} or payload.upper() not in ("ON", "OFF"):
             return
-        request = {"field": key, "value": payload.upper() == "ON"}
-        directory = self.database.parent / "commands"
-        try:
-            directory.mkdir(parents=True, exist_ok=True)
-            # The collector is the only consumer. If it is absent, keep the handoff
-            # bounded by discarding oldest requests before accepting a new one.
-            pending = sorted(directory.glob("*.json"))
-            excess = max(0, len(pending) - (CONTROL_QUEUE_MAX_FILES - 1))
-            for old in pending[:excess]:
-                with contextlib.suppress(OSError):
-                    old.unlink()
-            # If filesystem errors prevented enough pruning, fail closed by dropping
-            # the new request instead of growing the queue beyond its hard ceiling.
-            if sum(1 for _ in directory.glob("*.json")) >= CONTROL_QUEUE_MAX_FILES:
-                return
-            # Named uniquely and renamed into place, so the collector never reads
-            # a half-written request.
-            stem = f"{time.time_ns()}-{key}"
-            tmp = directory / (stem + ".tmp")
-            tmp.write_text(json.dumps(request), encoding="utf-8")
-            tmp.replace(directory / (stem + ".json"))
-        except OSError:
-            # A queued command that cannot be written is dropped, not retried:
-            # a stale output command is worse than a missing one.
-            pass
+        enqueue_control(self.database.parent / "commands", key,
+                        {"field": key, "value": payload.upper() == "ON"})
 
     def announce(self):
         payloads = discovery_payloads(self.dev_id, firmware=self.config.firmware,

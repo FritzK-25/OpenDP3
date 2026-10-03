@@ -140,6 +140,11 @@ A `config.json` written before this existed still loads its plain-text
 `mqtt_password` field normally, and the next save upgrades it to the
 DPAPI-protected form.
 
+DPAPI exists only on Windows. On Linux and macOS the password stays in the
+plain `mqtt_password` field, and `config.json` is created readable and writable
+by its owner alone (mode 0600). The Home Assistant app writes its working copy
+the same way.
+
 Passwords and the login response necessarily exist in process memory during setup.
 Clearing a dictionary, closing a dialog or dropping a Python reference does not
 guarantee secure erasure of immutable strings, library buffers, Qt text buffers,

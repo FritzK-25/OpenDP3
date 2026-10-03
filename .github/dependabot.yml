@@ -2,9 +2,10 @@ version: 2
 updates:
   # requirements.txt (the pinned Windows/release environment, read through
   # requirements.lock), packaging/requirements-build.txt (PyInstaller) and the
-  # Home Assistant app's requirements-headless.txt. Grouped so the root and
-  # app pins move together in one pull request; tests/test_packaging_extras.py
-  # checks the app still pins the same package set as pyproject.toml.
+  # Home Assistant app's requirements-headless.in, which Dependabot recompiles
+  # into the hashed requirements-headless.txt. Grouped so the root and app pins
+  # move together in one pull request; tests/test_packaging_extras.py checks
+  # the app still pins the same package set as pyproject.toml.
   - package-ecosystem: pip
     directories:
       - "/"
@@ -16,6 +17,8 @@ updates:
       python:
         patterns: ["*"]
 
+  # Actions are pinned to commit SHAs with a version comment
+  # (tests/test_workflows.py). Dependabot moves both together.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:

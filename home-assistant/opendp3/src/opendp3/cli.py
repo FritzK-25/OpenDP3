@@ -207,7 +207,7 @@ async def _jackery_ble_loop(store, interval, hours, serial, stop_file, *, config
                         # The station advertises only in short windows, so attaching is
                         # the expensive part. Hold the session once it is open and only
                         # rediscover after it actually drops.
-                        reader = await discover_reader(60)
+                        reader = await discover_reader(60, serial)
                         found = reader.identity.serial
                         if found != serial:
                             await reader.close()

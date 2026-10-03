@@ -1,6 +1,5 @@
 import json
 import zipfile
-from pathlib import Path
 import pytest
 from conftest import add
 from opendp3.exporting import export_evidence
