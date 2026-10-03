@@ -3,15 +3,13 @@ import csv
 from datetime import datetime, timezone
 import hashlib
 import html
-import io
 import json
 from pathlib import Path
 import zipfile
 
-from . import DECODER_VERSION
 from .fields import fields_for_session, is_jackery
 from .events import SAFE_EVENT_KINDS, contains_gaps
-from .queries import snapshot, plot_arrays
+from .queries import plot_arrays
 from .storage import read_db
 
 QUALIFICATION = (

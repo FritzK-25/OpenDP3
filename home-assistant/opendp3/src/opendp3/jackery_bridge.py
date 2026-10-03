@@ -7,7 +7,7 @@ import time
 
 from . import __version__
 from .bridge import (DISCOVERY_PREFIX, STATUS_TOPIC, Entity, as_timestamp, device_id,
-                     expired_fields, field_age_summary, field_availability,
+                     enqueue_control, expired_fields, field_age_summary, field_availability,
                      log_transition, observation_fresh, value_template)
 from .jackery import JACKERY_CONTROLS, jackery_control_value
 from .jackery_fields import JACKERY_FIELDS, map_properties
@@ -277,16 +277,11 @@ class JackeryBridge:
                 jackery_control_value(control, value)
             except ValueError:
                 return
-        directory = self.database.parent / "jackery-commands"
-        try:
-            directory.mkdir(parents=True, exist_ok=True)
-            stem = f"{time.time_ns()}-{control}"
-            tmp = directory / (stem + ".tmp")
-            tmp.write_text(json.dumps({"control": control, "value": value}), encoding="utf-8")
-            tmp.replace(directory / (stem + ".json"))
-        except OSError:
-            # A delayed output or battery-mode command is worse than a missing one.
-            pass
+        # The recorder drains this folder only while it holds a BLE session, so
+        # the same bound as the DP3 queue keeps an absent Explorer from turning
+        # repeated presses into unbounded disk growth.
+        enqueue_control(self.database.parent / "jackery-commands", control,
+                        {"control": control, "value": value})
 
     def _matching_session_id(self):
         """Return the newest session whose recorded device serial is ours.

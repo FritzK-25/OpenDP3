@@ -36,11 +36,12 @@ def smoke_test(destination: Path) -> int:
         from .exporting import export_evidence
         from .gui import Window
         from .validation import verify_recording
-        from .vendor.encryption import Type7Encryption
-        from .protocol import OutboundGate
+        # Imported only to prove the frozen build bundled them.
+        from .vendor.encryption import Type7Encryption  # noqa: F401
+        from .protocol import OutboundGate  # noqa: F401
         from Crypto.Cipher import AES
         import bleak.backends.winrt.client
-        import bleak.backends.winrt.scanner
+        import bleak.backends.winrt.scanner  # noqa: F401
         import ecdsa
         import opendp3
         result["app_version"] = opendp3.__version__

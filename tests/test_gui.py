@@ -1,5 +1,4 @@
 from pathlib import Path
-from PySide6.QtCore import Qt
 from opendp3.gui import Window
 from conftest import close_window, pump
 

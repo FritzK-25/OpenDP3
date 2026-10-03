@@ -101,15 +101,24 @@ def save_config(config: Config, path: Path | None = None):
     path = path or data_dir() / "config.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     values = asdict(config)
-    # Store the broker password DPAPI-protected, scoped to this Windows user,
-    # rather than in the plain mqtt_password field. See docs/SECURITY.md.
-    if values["mqtt_password"]:
+    # On Windows, store the broker password DPAPI-protected, scoped to this
+    # Windows user, rather than in the plain mqtt_password field. DPAPI does not
+    # exist elsewhere; there the plain field stays, in a file only this user can
+    # read. See docs/SECURITY.md.
+    if values["mqtt_password"] and os.name == "nt":
         values[_MQTT_PASSWORD_DPAPI_KEY] = base64.b64encode(
             dpapi.protect(values["mqtt_password"].encode("utf-8"))
         ).decode("ascii")
         values["mqtt_password"] = ""
     tmp = path.with_suffix(".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
+    # Owner-only from creation, so a plain-text password is never briefly
+    # readable by other users before the rename. Windows ignores the mode.
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    if os.name != "nt":
+        # The mode above applies only to a new file. A temp file left by an
+        # interrupted save keeps its old mode, so tighten it before writing.
+        os.fchmod(fd, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(values, f, indent=2)
         f.flush()
         os.fsync(f.fileno())

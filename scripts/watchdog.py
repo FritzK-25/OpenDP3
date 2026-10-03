@@ -53,6 +53,17 @@ def newest_frame(database: Path) -> int | None:
         return None
 
 
+def configured_devices(data: Path) -> dict[str, bool]:
+    """Which devices this machine records, by the same tests start_all applies.
+
+    The DP3 needs a saved setup; the Jackery needs its serial in the
+    environment. A device that is not set up has no workers to start and no
+    recording to go stale, so it must not keep the watchdog unhealthy.
+    """
+    return {"DP3": (data / "config.json").exists(),
+            "Jackery": start_all.jackery_serial() is not None}
+
+
 def lock_held(path: Path) -> bool:
     lock = portalocker.Lock(str(path), timeout=0)
     try:
@@ -91,20 +102,29 @@ def health(data: Path) -> tuple[bool, str, dict[str, bool]]:
     loss of ownership establishes a collector failure we can recover safely.
     """
     now_ns = time.time_ns()
-    ages = {"DP3": (newest_frame(data / "recordings.sqlite"), DP3_MAX_AGE),
-            "Jackery": (newest_frame(data / "jackery.sqlite"), JACKERY_MAX_AGE)}
+    devices = configured_devices(data)
+    if not any(devices.values()):
+        return False, "no device configured", {}
+    ages = {"DP3": (data / "recordings.sqlite", DP3_MAX_AGE),
+            "Jackery": (data / "jackery.sqlite", JACKERY_MAX_AGE)}
     reasons, actions = [], {}
     live = {}
-    for label, (stamp, max_age) in ages.items():
+    for label, (database, max_age) in ages.items():
+        if not devices[label]:
+            continue
+        stamp = newest_frame(database)
         live[label] = stamp is not None and 0 <= (now_ns-stamp)/1e9 <= max_age
         if not live[label]:
             reasons.append(f"{label} recording stale; collector may be reconnecting")
     for name, (lock_name, _, _) in WORKERS.items():
+        if not devices[name.split()[0]]:
+            continue
         if not lock_held(data / lock_name):
             reasons.append(f"{name} not running")
             actions[name] = False
     try:
-        broker = verify_broker_state(data, dp3=True, jackery=True, timeout=5.0)
+        broker = verify_broker_state(data, dp3=devices["DP3"], jackery=devices["Jackery"],
+                                     timeout=5.0)
         for label, state in broker.items():
             if state["availability"] != "online" or state["telemetry"] != "online":
                 reasons.append(f"{label} MQTT health is not online")

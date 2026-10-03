@@ -153,7 +153,7 @@ def report_broker_state(state: dict[str, dict[str, str | None]]) -> None:
             print(f"Broker      {label} did not respond on the broker within {BROKER_CHECK_TIMEOUT:g}s.")
         else:
             print(f"Broker      {label} stuck: availability={availability!r} telemetry={telemetry!r}.")
-            print(f"            Data may still be flowing underneath -- this is the retained-offline")
+            print("            Data may still be flowing underneath -- this is the retained-offline")
             print(f"            failure mode. Restart the {label} bridge to clear it.")
 
 
@@ -362,7 +362,6 @@ def main(argv=None) -> int:
     # stays windowless across the re-exec. stdio is redirected to the logs
     # below, which pythonw handles normally.
     python = Path(sys.executable)
-    interactive_python = python  # has a console; for messages a human will run by hand
     windowless = python.with_name("pythonw.exe")
     if windowless.exists():
         python = windowless

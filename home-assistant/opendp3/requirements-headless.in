@@ -1,0 +1,17 @@
+# The Home Assistant app's direct dependencies: the core dependencies in
+# pyproject.toml, pinned. tests/test_packaging_extras.py fails if the two sets
+# drift. requirements-headless.txt is compiled from this file with hashes for
+# every package, including transitive ones, so each user's image build installs
+# exactly what CI built:
+#
+#   pip-compile --generate-hashes --allow-unsafe --strip-extras requirements-headless.in
+#
+# Run it on Linux with Python 3.12, the image's platform.
+bleak==3.0.2
+ecdsa==0.19.2
+pycryptodome==3.23.0
+protobuf==7.36.2
+platformdirs==4.12.2
+portalocker==4.4.0
+httpx==0.28.1
+paho-mqtt==2.1.0

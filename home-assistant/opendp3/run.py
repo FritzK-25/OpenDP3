@@ -64,6 +64,19 @@ class FreshnessState:
     baseline_id: int | None
     last_frame_mono_ns: int | None
     armed: bool = False
+    # When this process was started, while it may still be held to the lease
+    # before recording anything. None once that start-up allowance is spent.
+    started_mono_ns: int | None = None
+
+
+# Used when options.json predates an option. A fresh app has no Jackery serial,
+# so that collector defaults off. The jobs and their freshness policies must
+# read the same answer, so both go through enabled().
+COLLECTOR_DEFAULTS = {"ecoflow": True, "jackery": False}
+
+
+def enabled(options, collector) -> bool:
+    return bool(options.get(collector + "_enabled", COLLECTOR_DEFAULTS[collector]))
 
 
 def adapter_name(value) -> str:
@@ -108,13 +121,13 @@ def job_environments(options) -> dict[str, dict[str, str]]:
 def freshness_policies(options, data: Path) -> dict[str, FreshnessPolicy]:
     policies = {}
     environments = job_environments(options)
-    if options.get("ecoflow_enabled", True):
+    if enabled(options, "ecoflow"):
         policies["ecoflow-collector"] = FreshnessPolicy(
             data / "recordings.sqlite",
             ECOFLOW_FRAME_LEASE,
             environments["ecoflow-collector"]["OPENDP3_BLE_ADAPTER"],
         )
-    if options.get("jackery_enabled", True):
+    if enabled(options, "jackery"):
         policies["jackery-collector"] = FreshnessPolicy(
             data / "jackery.sqlite",
             JACKERY_FRAME_LEASE,
@@ -156,12 +169,12 @@ def commands(options, data: Path):
     # Discovery is structural and does not depend on a live BLE session. Queue
     # every enabled MQTT publisher first, then the radio workers, so Home
     # Assistant can restore entities before either collector starts reacquiring.
-    if options.get("ecoflow_enabled", True):
+    if enabled(options, "ecoflow"):
         jobs["ecoflow-mqtt"] = prefix + ["bridge"]
         collectors["ecoflow-collector"] = worker + ["record"]
     # A fresh app has no Jackery serial, so missing legacy options default this
     # collector off rather than making the nominal package configuration invalid.
-    if options.get("jackery_enabled", False):
+    if enabled(options, "jackery"):
         serial = options.get("jackery_serial", "")
         if not isinstance(serial, str) or not re.fullmatch(r"[0-9]{15}", serial):
             raise ValueError("Set the 15-digit Jackery serial in app options.")
@@ -202,6 +215,10 @@ def supervise(jobs, stop, *, stagger=5, retry=15, grace=45, data=None,
     policies = policies or {}
     environments = environments or {}
     freshness = {}
+    # Collectors already restarted once for recording nothing since they
+    # started. A device that is simply switched off looks the same, so the
+    # start-up lease applies again only after a valid frame has arrived.
+    startup_spent = set()
     last_radio_recovery = float("-inf")
     next_freshness_check = 0.0
 
@@ -216,6 +233,7 @@ def supervise(jobs, stop, *, stagger=5, retry=15, grace=45, data=None,
             freshness[name] = FreshnessState(
                 baseline[0] if baseline else None,
                 baseline[1] if baseline else None,
+                started_mono_ns=None if name in startup_spent else time.monotonic_ns(),
             )
         return process
 
@@ -255,18 +273,26 @@ def supervise(jobs, stop, *, stagger=5, retry=15, grace=45, data=None,
                     state.last_frame_mono_ns = frame_mono_ns
                     if state.baseline_id is None or frame_id > state.baseline_id:
                         state.armed = True
-                if not state.armed or state.last_frame_mono_ns is None:
+                        startup_spent.discard(name)
+                # Measured from the newest valid frame once this process has
+                # recorded one, else from its start, so a collector that hangs
+                # before its first frame is not left running forever.
+                reference = state.last_frame_mono_ns if state.armed else state.started_mono_ns
+                if reference is None:
                     continue
-                age = (time.monotonic_ns() - state.last_frame_mono_ns) / 1e9
+                age = (time.monotonic_ns() - reference) / 1e9
                 if age <= policy.max_age:
                     continue
                 if now - last_radio_recovery < recovery_spacing:
                     continue
+                since = "" if state.armed else " since it started"
                 print(
-                    f"{name} valid-frame lease expired at {age:.1f}s on {policy.adapter}; "
-                    "restarting only this collector.",
+                    f"{name} valid-frame lease expired: no valid frame for {age:.1f}s{since} "
+                    f"on {policy.adapter}; restarting only this collector.",
                     flush=True,
                 )
+                if not state.armed:
+                    startup_spent.add(name)
                 _stop_child(process, grace=recovery_grace)
                 due[name] = time.monotonic() + retry
                 freshness[name] = FreshnessState(
