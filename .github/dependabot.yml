@@ -17,6 +17,8 @@ updates:
       python:
         patterns: ["*"]
 
+  # Actions are pinned to commit SHAs with a version comment
+  # (tests/test_workflows.py). Dependabot moves both together.
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
