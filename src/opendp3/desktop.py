@@ -47,8 +47,12 @@ def smoke_test(destination: Path) -> int:
         result["decoder_version"] = opendp3.DECODER_VERSION
         # Load the native crypto extension as well as the Python wrapper.
         AES.new(bytes(16), AES.MODE_CBC, bytes(16)).encrypt(bytes(16))
-        key = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p)
-        assert key.get_verifying_key().verify(key.sign(b"offline packaging test"), b"offline packaging test")
+        # Exercise the ephemeral secp160r1 ECDH that ble.authenticate() performs.
+        # Nothing in OpenDP3 signs with ecdsa; its signing timing leak
+        # (GHSA-wj6h-64fc-37mp) needs many signatures from one long-term key.
+        ours, theirs = (ecdsa.SigningKey.generate(curve=ecdsa.SECP160r1) for _ in range(2))
+        assert (ecdsa.ECDH(ecdsa.SECP160r1, ours, theirs.get_verifying_key()).generate_sharedsecret_bytes()
+                == ecdsa.ECDH(ecdsa.SECP160r1, theirs, ours.get_verifying_key()).generate_sharedsecret_bytes())
         result["adapter"] = asyncio.run(adapter_status())
         result["module_file"] = opendp3.__file__
         result["python_paths"] = list(sys.path)
