@@ -282,14 +282,14 @@ def bridge_worker(data: Path) -> int:
                     worker.stop()
                     return
                 if not announced and worker.client is not None and worker.client.is_connected():
-                    print(f"Publishing every {worker.interval:g}s. Stop with Stop-OpenDP3.cmd.",
+                    print(f"Publishing every {worker.interval:g}s. Stop with Stop-OpenPowerstation.cmd.",
                           flush=True)
                     announced = True
 
         threading.Thread(target=watch, daemon=True).start()
         worker.run()
     except (ValueError, FileNotFoundError, TypeError) as exc:
-        print(f"OpenDP3: {exc}", file=sys.stderr)
+        print(f"OpenPowerstation: {exc}", file=sys.stderr)
         return 1
     except KeyboardInterrupt:
         pass
@@ -319,7 +319,7 @@ def jackery_bridge_worker(data: Path) -> int:
             announced = False
             while not announced:
                 if worker.client is not None and worker.client.is_connected():
-                    print(f"Publishing Jackery every {worker.interval:g}s. Stop with Stop-OpenDP3.cmd.",
+                    print(f"Publishing Jackery every {worker.interval:g}s. Stop with Stop-OpenPowerstation.cmd.",
                           flush=True)
                     announced = True
                 time.sleep(0.25)
@@ -367,7 +367,7 @@ def main(argv=None) -> int:
         python = windowless
     config = data/"config.json"
     if not config.exists():
-        print(f"OpenDP3: no device configured yet ({config}). Run setup in the desktop app first.",
+        print(f"OpenPowerstation: no device configured yet ({config}). Run setup in the desktop app first.",
               file=sys.stderr)
         return 1
 
@@ -450,7 +450,7 @@ def main(argv=None) -> int:
         want_jackery = not args.no_jackery
         report_broker_state(verify_broker_state(data, dp3=True, jackery=want_jackery))
 
-    print(f"\nLogs in {data}. Stop everything with Stop-OpenDP3.cmd.")
+    print(f"\nLogs in {data}. Stop everything with Stop-OpenPowerstation.cmd.")
     return 0
 
 

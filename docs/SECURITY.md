@@ -7,7 +7,7 @@ The [security review disposition](SECURITY_REVIEW.md) records the changes in thi
 
 ## What the application protects
 
-OpenDP3's outbound allowlist permits the implemented authentication exchange and,
+OpenPowerstation's outbound allowlist permits the implemented authentication exchange and,
 when control is enabled, a small set of explicitly allowlisted device commands.
 No firmware commands, clock synchronization, cloud telemetry fallback, power-off,
 factory-reset, Wi-Fi, or arbitrary battery-boundary writes are enabled. The Jackery
@@ -58,7 +58,7 @@ that is unreachable, slow or hostile cannot directly reach the radio.
 **What this trusts.** Anything able to publish to your broker can request those
 allowlisted changes; MQTT access is the whole authorization boundary, so the
 broker account matters as much as the setting. Home Assistant control state comes
-from fresh device feedback rather than the last command OpenDP3 sent. A missing or
+from fresh device feedback rather than the last command OpenPowerstation sent. A missing or
 stale readback makes the corresponding control unavailable instead of guessing
 that a write succeeded. This improves state honesty but does not authenticate the
 device telemetry itself; the Bluetooth identity limits below still apply.
@@ -74,7 +74,7 @@ invalid-point inputs; it does not establish who owns the point.
 
 A nearby malicious device that successfully impersonates the selected DP3 could
 receive that ID-derived proof and supply fabricated telemetry. The proof permits
-offline guesses of the user ID; OpenDP3 does not claim a particular ID entropy or
+offline guesses of the user ID; OpenPowerstation does not claim a particular ID entropy or
 recovery time. Treat the ID and proof as sensitive. Rejecting unsupported session
 seeds prevents invalid key derivation; it does not add peer authentication. The
 vendored derivation table is public protocol material, not an additional secret.
@@ -82,7 +82,7 @@ vendored derivation table is public protocol material, not an additional secret.
 This is a protocol trust limitation, not evidence that a particular recording was
 attacked. It also does not mean every nearby radio can inject packets into an
 existing connection without first overcoming the relevant Bluetooth link/access
-constraints. OpenDP3 provides no independent application-level verification of
+constraints. OpenPowerstation provides no independent application-level verification of
 the peer that would resolve that risk. Use it in a physically controlled setting
 and stop connecting if the selected device's behavior or identity is unexpected.
 
@@ -97,13 +97,13 @@ compatibility. Padding acceptance is not an authenticity check.
 Length, framing, sentinel and CRC checks reject malformed or accidentally damaged
 packets. CRCs are not cryptographic signatures and do not establish who generated
 the bytes. An attacker controlling an accepted peer can construct internally
-consistent data. OpenDP3 cannot add authenticated device messages without support
+consistent data. OpenPowerstation cannot add authenticated device messages without support
 from the device protocol; it does not bypass device protections to do so.
 
 ## Recordings are not tamper-evident
 
 The SQLite database contains decrypted telemetry and is neither encrypted nor
-signed by OpenDP3. Anyone who can write to it can alter frames, decoded values,
+signed by OpenPowerstation. Anyone who can write to it can alter frames, decoded values,
 events, notes, or session metadata. Re-decoding checks consistency with a decoder,
 not origin: someone who modifies both the raw and decoded records may preserve
 that consistency. A private ZIP's SHA-256 entries detect differences relative to
@@ -120,12 +120,12 @@ An incident report alone does not prove that firmware caused a battery failure.
 ## Credentials, memory and Windows folders
 
 Manual user-ID setup requires no network request. Optional login sends the entered
-credentials over HTTPS to the selected fixed EcoFlow regional endpoint. OpenDP3
+credentials over HTTPS to the selected fixed EcoFlow regional endpoint. OpenPowerstation
 does not save EcoFlow account passwords, login tokens or session keys in
 configuration, recordings or exports. The ID and device configuration are retained
 locally.
 
-The one credential OpenDP3 does store is the optional Home Assistant broker
+The one credential OpenPowerstation does store is the optional Home Assistant broker
 password. It is DPAPI-protected (`CryptProtectData`, scoped to the current
 Windows user) before it is written to `config.json`, and DPAPI-unprotected on
 load; the plain field in the file is left empty. That ties the stored value to
@@ -154,7 +154,7 @@ are never in memory or that the operating system cannot persist memory contents.
 The default data location is the current user's application-data directory. For
 compatibility, a frozen executable reuses an existing `data` directory beside
 it, and launchers/`--data-dir` can choose a different location. Windows permissions
-are inherited: OpenDP3 does **not** automatically tighten or audit Windows ACLs.
+are inherited: OpenPowerstation does **not** automatically tighten or audit Windows ACLs.
 Its setup warning is informational, not detection or enforcement of safe ACLs.
 
 Keep the executable and data in folders private to your Windows account. Avoid
@@ -192,7 +192,7 @@ the trust limits described above apply unchanged to anything Home Assistant show
 Open only recordings from a source you trust. `mode=ro` and `query_only` limit
 database writes; they are not a sandbox. SQLite still parses the file, and the
 viewer parses stored JSON and numerical data. A malicious file can cause errors,
-excessive processing or exploit a dependency flaw. OpenDP3 does not qualify its
+excessive processing or exploit a dependency flaw. OpenPowerstation does not qualify its
 viewer as safe for arbitrary hostile SQLite files. Keep the app and its bundled
 dependencies updated. See [SQLite's guidance for untrusted input](https://www.sqlite.org/security.html).
 

@@ -1,4 +1,4 @@
-"""Copy the OpenDP3 sources into the Home Assistant app's build context.
+"""Copy the OpenPowerstation sources into the Home Assistant app's build context.
 
 Home Assistant builds an app from its own folder only, so the package has to
 sit inside ``home-assistant/opendp3/`` to be built. The copy is committed, and
@@ -64,7 +64,7 @@ def source_digest() -> str:
 def provenance() -> dict:
     sys.path.insert(0, str(ROOT / "src"))
     import opendp3
-    return {"repository": "FritzK-25/OpenDP3", "version": opendp3.__version__,
+    return {"repository": "FritzK-25/OpenPowerstation", "version": opendp3.__version__,
             "source_sha256": source_digest()}
 
 

@@ -14,10 +14,10 @@ from project_version import read as read_source
 
 root = Path(__file__).resolve().parent.parent
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("--executable", type=Path, default=root / "OpenDP3.exe")
+parser.add_argument("--executable", type=Path, default=root / "OpenPowerstation.exe")
 source = parser.parse_args().executable.resolve()
 workspace = Path(tempfile.mkdtemp(prefix="standalone-", dir=root / "artifacts"))
-executable = workspace / "OpenDP3.exe"
+executable = workspace / "OpenPowerstation.exe"
 shutil.copyfile(source, executable)
 archive = CArchiveReader(str(executable))
 assert not any(name.lower().endswith((".sqlite", ".sqlite-wal", ".sqlite-shm"))

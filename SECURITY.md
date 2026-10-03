@@ -21,5 +21,5 @@ project reads but does not control.
 
 [docs/SECURITY.md](docs/SECURITY.md) describes the threat model, what is
 protected and what is not. In short: control is off by default, only a small
-allowlist of commands can ever reach the radio, and OpenDP3 is not a safety
+allowlist of commands can ever reach the radio, and OpenPowerstation is not a safety
 system.

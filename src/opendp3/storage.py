@@ -82,7 +82,7 @@ class Store:
             self.conn.row_factory = sqlite3.Row
             version = self.conn.execute("PRAGMA user_version").fetchone()[0]
             if version not in (0, 1):
-                raise StorageError("This database was created by a newer OpenDP3 version.")
+                raise StorageError("This database was created by a newer OpenPowerstation version.")
             self.conn.execute("PRAGMA auto_vacuum=INCREMENTAL")
             self.conn.execute("PRAGMA journal_mode=WAL")
             self.conn.execute("PRAGMA synchronous=FULL")

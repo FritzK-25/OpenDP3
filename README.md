@@ -1,4 +1,4 @@
-# OpenDP3
+# OpenPowerstation
 
 Local Bluetooth telemetry, history, diagnostics and optional Home Assistant
 integration for supported EcoFlow and Jackery power stations.
@@ -9,7 +9,7 @@ No cloud telemetry is required. Your recording stays on your own machine.
 > mature, but hardware qualification is incomplete. See
 > [what has and has not been qualified](#status-and-known-limits).
 
-OpenDP3 is an independent community project. It is not affiliated with,
+OpenPowerstation is an independent community project. It is not affiliated with,
 endorsed by, or supported by EcoFlow or Jackery. It is diagnostic and
 automation software, **not a safety monitor and not a replacement for the
 battery's own protections (BMS)**.
@@ -33,7 +33,7 @@ is unsigned, so Windows SmartScreen will warn you; the hash and the build
 workflow are how you check what you are running.
 
 **I use Home Assistant OS.** Add this repository to the Home Assistant app
-store, then install **OpenDP3 Battery Telemetry**. It records over the host's
+store, then install **OpenPowerstation Battery Telemetry**. It records over the host's
 Bluetooth and publishes entities through MQTT discovery. See
 [the app guide](home-assistant/opendp3/DOCS.md).
 
@@ -42,8 +42,8 @@ and use the command line, the protocol decoder, the storage layer and the test
 suite.
 
 ```bash
-git clone https://github.com/FritzK-25/OpenDP3.git
-cd OpenDP3
+git clone https://github.com/FritzK-25/OpenPowerstation.git
+cd OpenPowerstation
 python -m venv .venv
 .venv/bin/pip install -e ".[test]"      # Windows: .venv\Scripts\pip
 .venv/bin/python -m pytest -q
@@ -95,7 +95,7 @@ Bluetooth addresses, account IDs, MQTT credentials or raw recordings.
 |---|---|
 | [Reference manual](docs/REFERENCE.md) | Using the viewer, the event catalog, storage, privacy, the command line |
 | [Security and evidence trust](docs/SECURITY.md) | What is sent, what is blocked, and what the recorder cannot prove |
-| [Protocol schema](docs/PROTOCOL_SCHEMA.md) | The pinned protocol definitions OpenDP3 decodes |
+| [Protocol schema](docs/PROTOCOL_SCHEMA.md) | The pinned protocol definitions OpenPowerstation decodes |
 | [Validation](docs/VALIDATION.md) | What the tests do and do not establish |
 | [Windows packaging](docs/PACKAGING.md) | Building and verifying the executable |
 | [Home Assistant app](home-assistant/opendp3/DOCS.md) | Installing and configuring the app |
@@ -103,7 +103,7 @@ Bluetooth addresses, account IDs, MQTT credentials or raw recordings.
 
 ## Licence and credit
 
-OpenDP3 is licensed under the [Apache License 2.0](LICENSE). Its protocol
+OpenPowerstation is licensed under the [Apache License 2.0](LICENSE). Its protocol
 foundation is [ha-ef-ble](https://github.com/rabits/ha-ef-ble) (Apache-2.0).
 The desktop build bundles Qt for Python (LGPL-3.0). Notices and licence texts
 are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and
