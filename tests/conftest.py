@@ -22,6 +22,25 @@ def evidence(tmp_path):
         recorder = Recorder(store,utc_ns=1_000_000_000_000_000_000,mono_ns=0)
         yield store,recorder
 
+@pytest.fixture(autouse=True)
+def no_modal_dialogs(monkeypatch):
+    """Fail a test that opens a modal dialog instead of hanging the whole run.
+
+    Offscreen, nobody can click the dialog away: one QMessageBox.warning left
+    the Linux CI job waiting until it was cancelled. Tests that expect an error
+    patch show_error themselves, which takes precedence over this.
+    """
+    try:
+        from PySide6.QtWidgets import QFileDialog, QMessageBox
+    except ImportError:
+        return
+    def refuse(*args, **kwargs):
+        pytest.fail(f"test opened a modal dialog: {args[1:3]!r}", pytrace=False)
+    for name in ("warning", "critical", "information", "question"):
+        monkeypatch.setattr(QMessageBox, name, refuse)
+    for name in ("getOpenFileName", "getSaveFileName", "getExistingDirectory"):
+        monkeypatch.setattr(QFileDialog, name, refuse)
+
 def add(rec,raw,t,wall_offset=0):
     rec.ingest(raw,rec.start_utc+int((t+wall_offset)*1e9),rec.start_mono+int(t*1e9))
 
