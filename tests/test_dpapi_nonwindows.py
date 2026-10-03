@@ -32,3 +32,37 @@ def test_load_config_sanitizes_dpapi_failure_off_windows(tmp_path):
         load_config(path)
 
     assert str(error.value) == "Invalid configuration file. Run local setup again."
+
+
+def _config():
+    from opendp3.config import Config
+    return Config("AA:BB:CC:DD:EE:FF", "MR51123456789012", "123456",
+                  mqtt_host="broker", mqtt_password="secret")
+
+
+def test_save_config_keeps_the_password_owner_only_off_windows(tmp_path):
+    from opendp3.config import save_config
+    path = tmp_path / "config.json"
+
+    save_config(_config(), path)
+
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    assert stored["mqtt_password"] == "secret"
+    assert "mqtt_password_dpapi" not in stored
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert load_config(path).mqtt_password == "secret"
+
+
+def test_legacy_plaintext_config_can_be_saved_again_off_windows(tmp_path):
+    from opendp3.config import save_config
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({"address": "AA:BB:CC:DD:EE:FF", "serial": "MR51123456789012",
+                                "user_id": "123456", "mqtt_host": "broker",
+                                "mqtt_password": "secret"}), encoding="utf-8")
+    config = load_config(path)
+    config.firmware = "1.0"
+
+    save_config(config, path)
+
+    assert load_config(path).firmware == "1.0"
+    assert load_config(path).mqtt_password == "secret"
