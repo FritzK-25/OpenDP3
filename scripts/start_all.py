@@ -101,7 +101,7 @@ def verify_broker_state(data: Path, *, dp3: bool, jackery: bool,
     if not result:
         return result
 
-    from opendp3.bridge import device_id
+    from opendp3.bridge import HA_ID_PREFIX, device_id
     from opendp3.config import load_config
     cfg = load_config(data/"config.json")
     if not cfg.mqtt_host:
@@ -109,7 +109,7 @@ def verify_broker_state(data: Path, *, dp3: bool, jackery: bool,
 
     bases = {}
     if dp3:
-        bases["DP3"] = "opendp3/" + device_id(cfg.serial)
+        bases["DP3"] = HA_ID_PREFIX + "/" + device_id(cfg.serial)
     if jackery and jackery_serial():
         bases["Jackery"] = "jackery/" + device_id(jackery_serial())
     topics = {f"{base}/{kind}": (label, kind) for label, base in bases.items()

@@ -27,6 +27,11 @@ from .decoder import FIELDS
 from .queries import latest
 
 DISCOVERY_PREFIX = "homeassistant"
+# Frozen identifier, independent of the project's display name. Every existing
+# install has it stored in MQTT topics, entity unique_ids and entity ids, and
+# the Home Assistant device registry; changing it orphans those entities and
+# creates duplicates. tests/test_frozen_identifiers.py pins it.
+HA_ID_PREFIX = "opendp3"
 STATUS_TOPIC = DISCOVERY_PREFIX + "/status"
 # The controls this bridge will relay, matching protocol.CONTROL_FIELDS exactly.
 # Anything else is refused by the outbound gate in the collector regardless, so
@@ -217,7 +222,7 @@ def observation_fresh(observation, now_ns, stale_seconds):
 
 
 def control_topic(dev_id: str, key: str) -> str:
-    return f"opendp3/{dev_id}/control/{key}/set"
+    return f"{HA_ID_PREFIX}/{dev_id}/control/{key}/set"
 
 
 def control_discovery(dev_id: str, device: dict, origin: dict) -> dict:
@@ -228,18 +233,18 @@ def control_discovery(dev_id: str, device: dict, origin: dict) -> dict:
     command succeeded. Before a feedback field is observed the switch is
     unavailable, which distinguishes "not checked yet" from a real off state.
     """
-    base = "opendp3/" + dev_id
+    base = HA_ID_PREFIX + "/" + dev_id
     payloads = {}
     for key, name in CONTROLS:
         feedback = CONTROL_FEEDBACK_FIELDS[key]
-        topic = "/".join([DISCOVERY_PREFIX, "switch", "opendp3_" + dev_id, key, "config"])
+        topic = "/".join([DISCOVERY_PREFIX, "switch", HA_ID_PREFIX + "_" + dev_id, key, "config"])
         payloads[topic] = {
             "name": name,
-            "unique_id": "opendp3_" + dev_id + "_" + key,
+            "unique_id": HA_ID_PREFIX + "_" + dev_id + "_" + key,
             # Keep object_id for older Home Assistant releases, but modern HA
             # requires default_entity_id to seed a deterministic entity_id.
-            "object_id": "opendp3_" + key,
-            "default_entity_id": "switch.opendp3_" + key,
+            "object_id": HA_ID_PREFIX + "_" + key,
+            "default_entity_id": "switch." + HA_ID_PREFIX + "_" + key,
             "command_topic": control_topic(dev_id, key),
             "state_topic": base + "/state",
             "value_template": control_state_template(feedback),
@@ -260,8 +265,8 @@ def control_discovery(dev_id: str, device: dict, origin: dict) -> dict:
 
 def discovery_payloads(dev_id: str, *, firmware: str = "", control: bool = False) -> dict:
     """``{discovery topic: config payload}``, generated from the decoder field table."""
-    base = "opendp3/" + dev_id
-    device = {"identifiers": ["opendp3_" + dev_id], "name": "EcoFlow DELTA Pro 3",
+    base = HA_ID_PREFIX + "/" + dev_id
+    device = {"identifiers": [HA_ID_PREFIX + "_" + dev_id], "name": "EcoFlow DELTA Pro 3",
               "manufacturer": "EcoFlow", "model": "DELTA Pro 3"}
     if firmware:
         device["sw_version"] = firmware
@@ -270,11 +275,11 @@ def discovery_payloads(dev_id: str, *, firmware: str = "", control: bool = False
     for entity in entities():
         config = {
             "name": entity.name,
-            "unique_id": "opendp3_" + dev_id + "_" + entity.key,
+            "unique_id": HA_ID_PREFIX + "_" + dev_id + "_" + entity.key,
             # object_id remains for compatibility with older Home Assistant releases;
             # default_entity_id is the supported deterministic ID hint now.
-            "object_id": "opendp3_" + entity.key,
-            "default_entity_id": entity.component + ".opendp3_" + entity.key,
+            "object_id": HA_ID_PREFIX + "_" + entity.key,
+            "default_entity_id": entity.component + "." + HA_ID_PREFIX + "_" + entity.key,
             "state_topic": base + "/state",
             "value_template": value_template(entity.key),
             "device": device,
@@ -306,7 +311,7 @@ def discovery_payloads(dev_id: str, *, firmware: str = "", control: bool = False
             config.pop("availability_topic", None)
             config["availability"] = field_availability(base, entity.key)
             config["availability_mode"] = "all"
-        topic = "/".join([DISCOVERY_PREFIX, entity.component, "opendp3_" + dev_id, entity.key, "config"])
+        topic = "/".join([DISCOVERY_PREFIX, entity.component, HA_ID_PREFIX + "_" + dev_id, entity.key, "config"])
         payloads[topic] = config
     if control:
         payloads.update(control_discovery(dev_id, device, origin))
@@ -379,7 +384,7 @@ class Bridge:
         self.interval = float(interval or config.mqtt_interval)
         self.stale_seconds = stale_seconds
         self.dev_id = device_id(config.serial)
-        self.base = "opendp3/" + self.dev_id
+        self.base = HA_ID_PREFIX + "/" + self.dev_id
         self.client = client
         self.announced = False
         self.telemetry_online = None
@@ -390,7 +395,7 @@ class Bridge:
 
     def build_client(self):
         import paho.mqtt.client as mqtt
-        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="opendp3-" + self.dev_id)
+        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=HA_ID_PREFIX + "-" + self.dev_id)
         if self.config.mqtt_username:
             client.username_pw_set(self.config.mqtt_username, self.config.mqtt_password or None)
         if self.config.mqtt_tls:
@@ -440,9 +445,9 @@ class Bridge:
         # Never give them a new file timestamp and hence a new execution lease.
         if getattr(message, "retain", False):
             return
-        # opendp3/<dev_id>/control/<key>/set
+        # <HA_ID_PREFIX>/<dev_id>/control/<key>/set
         parts = message.topic.split("/")
-        if len(parts) == 5 and parts[:3] == ["opendp3", self.dev_id, "control"] and parts[4] == "set":
+        if len(parts) == 5 and parts[:3] == [HA_ID_PREFIX, self.dev_id, "control"] and parts[4] == "set":
             self.queue_control(parts[3], message.payload.decode("utf-8", "replace").strip())
 
     def queue_control(self, key, payload):
@@ -556,10 +561,11 @@ def describe(config, database, *, stale_seconds=STALE_SECONDS, out=None):
                                   control=config.allow_control)
     header = "  {:<46}{:<6}{:<14}{:<18}{}".format(
         "entity_id", "unit", "device_class", "state_class", "category")
-    print("Device        opendp3_" + dev_id + "  (EcoFlow DELTA Pro 3)", file=out)
-    print("State topic   opendp3/" + dev_id + "/state", file=out)
-    print("Availability  opendp3/" + dev_id + "/availability (bridge), "
-          "opendp3/" + dev_id + "/telemetry (device)", file=out)
+    base = HA_ID_PREFIX + "/" + dev_id
+    print("Device        " + HA_ID_PREFIX + "_" + dev_id + "  (EcoFlow DELTA Pro 3)", file=out)
+    print("State topic   " + base + "/state", file=out)
+    print("Availability  " + base + "/availability (bridge), "
+          + base + "/telemetry (device)", file=out)
     print("\n{} discovery messages:\n".format(len(payloads)), file=out)
     print(header, file=out)
     for topic, payload in payloads.items():
