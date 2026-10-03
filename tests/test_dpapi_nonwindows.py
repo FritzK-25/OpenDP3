@@ -66,3 +66,21 @@ def test_legacy_plaintext_config_can_be_saved_again_off_windows(tmp_path):
 
     assert load_config(path).firmware == "1.0"
     assert load_config(path).mqtt_password == "secret"
+
+
+def test_leftover_temp_file_is_tightened_before_the_password_is_written(tmp_path, monkeypatch):
+    from opendp3.config import save_config
+    path = tmp_path / "config.json"
+    leftover = tmp_path / "config.tmp"
+    leftover.write_text("{}", encoding="utf-8")
+    leftover.chmod(0o644)
+
+    def interrupted(*_):
+        raise OSError("interrupted before the rename")
+
+    monkeypatch.setattr("opendp3.config.os.replace", interrupted)
+    with pytest.raises(OSError):
+        save_config(_config(), path)
+
+    assert json.loads(leftover.read_text(encoding="utf-8"))["mqtt_password"] == "secret"
+    assert leftover.stat().st_mode & 0o777 == 0o600
