@@ -20,6 +20,36 @@ def healthy(monkeypatch):
         "DP3": {"availability": "online", "telemetry": "online"},
         "Jackery": {"availability": "online", "telemetry": "online"},
     })
+    monkeypatch.setattr(watchdog, "configured_devices", lambda data: {"DP3": True, "Jackery": True})
+
+
+def test_an_unconfigured_device_is_neither_checked_nor_started(tmp_path, monkeypatch, healthy):
+    monkeypatch.setattr(watchdog, "configured_devices", lambda data: {"DP3": True, "Jackery": False})
+    monkeypatch.setattr(watchdog, "newest_frame",
+                        lambda p: None if p.name == "jackery.sqlite" else 1_000_000_000_000)
+    monkeypatch.setattr(watchdog, "lock_held", lambda p: not p.name.startswith("jackery"))
+    asked = {}
+
+    def broker(data, **kwargs):
+        asked.update(kwargs)
+        return {"DP3": {"availability": "online", "telemetry": "online"}}
+
+    monkeypatch.setattr(watchdog, "verify_broker_state", broker)
+    assert watchdog.health(tmp_path) == (True, "healthy", {})
+    assert asked["jackery"] is False
+
+
+def test_configured_devices_follow_the_launcher(tmp_path, monkeypatch):
+    monkeypatch.delenv(watchdog.start_all.JACKERY_SERIAL_ENV, raising=False)
+    assert watchdog.configured_devices(tmp_path) == {"DP3": False, "Jackery": False}
+    (tmp_path / "config.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setenv(watchdog.start_all.JACKERY_SERIAL_ENV, "123456789012345")
+    assert watchdog.configured_devices(tmp_path) == {"DP3": True, "Jackery": True}
+
+
+def test_nothing_configured_is_reported_without_actions(tmp_path, monkeypatch, healthy):
+    monkeypatch.setattr(watchdog, "configured_devices", lambda data: {"DP3": False, "Jackery": False})
+    assert watchdog.health(tmp_path) == (False, "no device configured", {})
 
 
 def test_broker_outage_does_not_restart_any_owned_worker(tmp_path, monkeypatch, healthy):
