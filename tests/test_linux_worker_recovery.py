@@ -357,3 +357,15 @@ def test_a_recording_collector_is_not_restarted(monkeypatch):
     spawned = run_supervisor(monkeypatch, lambda now: (int(now), int(now * 1e9)), limit=200)
 
     assert len(spawned) == 1
+
+
+@pytest.mark.parametrize("options", [
+    {},
+    {"ecoflow_enabled": True},
+    {"ecoflow_enabled": False, "jackery_enabled": True, "jackery_serial": "123456789012345"},
+    {"ecoflow_enabled": True, "jackery_enabled": True, "jackery_serial": "123456789012345"},
+])
+def test_freshness_policies_cover_exactly_the_started_collectors(options):
+    collectors = {name for name in run.commands(options, Path("/data"))
+                  if name.endswith("-collector")}
+    assert set(run.freshness_policies(options, Path("/data"))) == collectors
