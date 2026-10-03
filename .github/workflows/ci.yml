@@ -8,6 +8,12 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same pull request supersedes the old run. Runs on main
+# always finish, so every commit there keeps a result.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     strategy:
@@ -29,7 +35,7 @@ jobs:
       - name: Test
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -m pytest -v --durations=25 -o faulthandler_timeout=240
+        run: python -m pytest -q --durations=25
       - name: Protocol reference is current
         run: python scripts/generate_protocol_reference.py --check
       - name: Home Assistant app copy is current
