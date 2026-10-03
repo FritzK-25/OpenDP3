@@ -16,6 +16,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+# A fresh checkout has no data folder yet; Resolve-Path fails on a missing path.
+New-Item -ItemType Directory -Path $DataDir -Force | Out-Null
 $data = (Resolve-Path $DataDir).Path
 $watchdog = (Resolve-Path (Join-Path $PSScriptRoot 'watchdog.py')).Path
 
