@@ -6,9 +6,9 @@ from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
 from PySide6.QtGui import QMouseEvent, QWheelEvent
 from PySide6.QtWidgets import QApplication
 
-from opendp3.gui import Window
-from opendp3.ui.charts import elapsed_text, nearest_sample, sample_value, value_range
-from opendp3.ui.widgets import ChartPanel
+from openpowerstation.gui import Window
+from openpowerstation.ui.charts import elapsed_text, nearest_sample, sample_value, value_range
+from openpowerstation.ui.widgets import ChartPanel
 from conftest import close_window, pump
 
 
@@ -149,7 +149,7 @@ def test_explicit_navigation_leaves_custom_window(viewer, action):
 
 
 def test_inflight_snapshot_cannot_overwrite_new_zoom(viewer, monkeypatch):
-    import opendp3.gui as gui
+    import openpowerstation.gui as gui
     original = gui.snapshot
     started, release = threading.Event(), threading.Event()
 
@@ -234,8 +234,8 @@ def test_fit_y_keeps_time_and_percentage_context(viewer, qtbot):
 
 
 def test_live_refresh_preserves_inspection_until_latest(qtbot, tmp_path, packet):
-    from opendp3.recorder import Recorder
-    from opendp3.storage import Store
+    from openpowerstation.recorder import Recorder
+    from openpowerstation.storage import Store
     from conftest import add
 
     with Store(tmp_path / "live.sqlite", reserve_bytes=0) as store:
@@ -430,8 +430,8 @@ def test_isolated_sample_remains_inspectable_with_pixel_tolerance():
 
 
 def test_idle_drift_and_single_samples_are_visible_by_default(qtbot, tmp_path, packet):
-    from opendp3.recorder import Recorder
-    from opendp3.storage import Store
+    from openpowerstation.recorder import Recorder
+    from openpowerstation.storage import Store
     from conftest import add
 
     with Store(tmp_path / "idle.sqlite", reserve_bytes=0) as store:

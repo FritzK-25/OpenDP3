@@ -108,7 +108,7 @@ def export_evidence(database: Path, destination: Path, *, sid=None, incident_id=
     except ModuleNotFoundError as exc:
         raise ValueError(
             f"Evidence charts need the '{exc.name}' package, which is not "
-            "installed. Install the chart extra: pip install 'opendp3[charts]'"
+            "installed. Install the chart extra: pip install 'openpowerstation[charts]'"
         ) from None
     groups = [("temperature","Temperature (°C)"),("power","Power (W)"),("soc","SOC / SOH (%)"),("state","Raw state / error")]
     if is_jackery(session):

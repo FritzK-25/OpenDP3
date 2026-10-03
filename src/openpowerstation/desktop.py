@@ -43,9 +43,9 @@ def smoke_test(destination: Path) -> int:
         import bleak.backends.winrt.client
         import bleak.backends.winrt.scanner  # noqa: F401
         import ecdsa
-        import opendp3
-        result["app_version"] = opendp3.__version__
-        result["decoder_version"] = opendp3.DECODER_VERSION
+        import openpowerstation
+        result["app_version"] = openpowerstation.__version__
+        result["decoder_version"] = openpowerstation.DECODER_VERSION
         # Load the native crypto extension as well as the Python wrapper.
         AES.new(bytes(16), AES.MODE_CBC, bytes(16)).encrypt(bytes(16))
         # Exercise the ephemeral secp160r1 ECDH that ble.authenticate() performs.
@@ -55,7 +55,7 @@ def smoke_test(destination: Path) -> int:
         assert (ecdsa.ECDH(ecdsa.SECP160r1, ours, theirs.get_verifying_key()).generate_sharedsecret_bytes()
                 == ecdsa.ECDH(ecdsa.SECP160r1, theirs, ours.get_verifying_key()).generate_sharedsecret_bytes())
         result["adapter"] = asyncio.run(adapter_status())
-        result["module_file"] = opendp3.__file__
+        result["module_file"] = openpowerstation.__file__
         result["python_paths"] = list(sys.path)
         db = make_demo(destination / "synthetic.sqlite")
         result["replay"] = verify_recording(db)

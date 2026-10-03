@@ -5,8 +5,8 @@ import os
 
 import pytest
 
-from opendp3 import dpapi
-from opendp3.config import load_config
+from openpowerstation import dpapi
+from openpowerstation.config import load_config
 
 
 pytestmark = pytest.mark.skipif(os.name == "nt", reason="non-Windows DPAPI contract")
@@ -35,13 +35,13 @@ def test_load_config_sanitizes_dpapi_failure_off_windows(tmp_path):
 
 
 def _config():
-    from opendp3.config import Config
+    from openpowerstation.config import Config
     return Config("AA:BB:CC:DD:EE:FF", "MR51123456789012", "123456",
                   mqtt_host="broker", mqtt_password="secret")
 
 
 def test_save_config_keeps_the_password_owner_only_off_windows(tmp_path):
-    from opendp3.config import save_config
+    from openpowerstation.config import save_config
     path = tmp_path / "config.json"
 
     save_config(_config(), path)
@@ -54,7 +54,7 @@ def test_save_config_keeps_the_password_owner_only_off_windows(tmp_path):
 
 
 def test_legacy_plaintext_config_can_be_saved_again_off_windows(tmp_path):
-    from opendp3.config import save_config
+    from openpowerstation.config import save_config
     path = tmp_path / "config.json"
     path.write_text(json.dumps({"address": "AA:BB:CC:DD:EE:FF", "serial": "MR51123456789012",
                                 "user_id": "123456", "mqtt_host": "broker",
@@ -69,7 +69,7 @@ def test_legacy_plaintext_config_can_be_saved_again_off_windows(tmp_path):
 
 
 def test_leftover_temp_file_is_tightened_before_the_password_is_written(tmp_path, monkeypatch):
-    from opendp3.config import save_config
+    from openpowerstation.config import save_config
     path = tmp_path / "config.json"
     leftover = tmp_path / "config.tmp"
     leftover.write_text("{}", encoding="utf-8")
@@ -78,7 +78,7 @@ def test_leftover_temp_file_is_tightened_before_the_password_is_written(tmp_path
     def interrupted(*_):
         raise OSError("interrupted before the rename")
 
-    monkeypatch.setattr("opendp3.config.os.replace", interrupted)
+    monkeypatch.setattr("openpowerstation.config.os.replace", interrupted)
     with pytest.raises(OSError):
         save_config(_config(), path)
 

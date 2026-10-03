@@ -391,7 +391,7 @@ def desktop_component(module, attribute):
     except ModuleNotFoundError as exc:
         raise ValueError(
             f"The desktop commands need the '{exc.name}' package, which is not "
-            "installed. Install the desktop extra: pip install 'opendp3[gui]'"
+            "installed. Install the desktop extra: pip install 'openpowerstation[gui]'"
         ) from None
 
 def main(argv=None):

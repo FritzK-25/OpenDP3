@@ -1,5 +1,5 @@
 """The default data directory survives the rename from OpenDP3."""
-from opendp3 import config
+from openpowerstation import config
 
 
 def use_root(monkeypatch, root):

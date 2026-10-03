@@ -37,7 +37,7 @@ the firmware hypothesis; it does not assume the firmware caused a fault.
 - [Which EcoFlow API does this use?](#which-ecoflow-api-does-this-use)
 - [Read the evidence](#read-the-evidence)
 - [Events and BLE API reference](#events-and-ble-api-reference)
-- [Complete timeline-event catalog](#complete-opendp3-timeline-event-catalog)
+- [Complete timeline-event catalog](#complete-openpowerstation-timeline-event-catalog)
 - [Device-originated messages](#device-originated-messages-and-event-structures)
 - [Mapped telemetry fields](#telemetry-fields-available-to-this-decoder)
 - [Storage and privacy](#storage-and-privacy)
@@ -97,7 +97,7 @@ platform, install with pip install -e ".[gui,test,test-gui]" instead; Linux hard
 The desktop packages are optional extras, so plain pip install -e . gives the
 headless collectors, bridges and CLI without Qt -- which is what the Home
 Assistant add-on installs. Add ".[gui]" for the desktop window, or ".[charts]"
-on a headless box that only needs opendp3 export to render evidence.
+on a headless box that only needs openpowerstation export to render evidence.
 
 1. Choose **File → Create synthetic demonstration** to explore the interface.
    Synthetic and device recordings use different databases.
@@ -289,9 +289,9 @@ and after its receipt time. Neither property establishes the battery's state.
 | `clock_change` | UTC receipt-time advancement differed from monotonic advancement by more than 2 seconds between frames | No | No |
 | `manual` | User added a private incident marker/note | No | Yes |
 
-Implementation sources: [BLE receiver](../src/opendp3/ble.py),
-[collection service](../src/opendp3/runtime.py), [recorder](../src/opendp3/recorder.py),
-and [export allowlist](../src/opendp3/exporting.py). The database accepts a string
+Implementation sources: [BLE receiver](../src/openpowerstation/ble.py),
+[collection service](../src/openpowerstation/runtime.py), [recorder](../src/openpowerstation/recorder.py),
+and [export allowlist](../src/openpowerstation/exporting.py). The database accepts a string
 category rather than enforcing a closed EcoFlow enum.
 
 #### `connected` — authenticated BLE session
@@ -808,8 +808,8 @@ listening socket — the only network activity is an outbound connection to your
 broker. A broker that is down, slow, or unreachable cannot stall or stop a
 recording. That separation is the point: capture never depends on publication.
 
-    .\.venv\Scripts\python.exe -m opendp3 --data-dir data bridge --dry-run
-    .\.venv\Scripts\python.exe -m opendp3 --data-dir data bridge
+    .\.venv\Scripts\python.exe -m openpowerstation --data-dir data bridge --dry-run
+    .\.venv\Scripts\python.exe -m openpowerstation --data-dir data bridge
 
 Or run **OpenPowerstation-Bridge.cmd**. Use `--dry-run` first: it prints every entity and the
 current state payload without connecting to anything.
@@ -833,22 +833,22 @@ created only for this, so the stored value grants nothing else. See
 
 Run commands with the project's Python:
 
-    .\.venv\Scripts\python.exe -m opendp3 scan
-    .\.venv\Scripts\python.exe -m opendp3 jackery-scan --seconds 15
-    .\.venv\Scripts\python.exe -m opendp3 jackery-status --seconds 30
-    .\.venv\Scripts\python.exe -m opendp3 --data-dir data setup
-    .\.venv\Scripts\python.exe -m opendp3 --data-dir data setup --login
-    .\.venv\Scripts\python.exe -m opendp3 --data-dir data record --hours 8
-    .\.venv\Scripts\python.exe -m opendp3 --data-dir data jackery-record --interval 3
-    .\.venv\Scripts\python.exe -m opendp3 --data-dir data jackery-compact
-    .\.venv\Scripts\python.exe -m opendp3 --data-dir data jackery-bridge --interval 60
-    .\.venv\Scripts\python.exe -m opendp3 --data-dir data gui
-    .\.venv\Scripts\python.exe -m opendp3 --data-dir data bridge --dry-run
-    .\.venv\Scripts\python.exe -m opendp3 --data-dir data bridge
-    .\.venv\Scripts\python.exe -m opendp3 demo --database artifacts\example.sqlite
-    .\.venv\Scripts\python.exe -m opendp3 replay artifacts\example.sqlite --verify
-    .\.venv\Scripts\python.exe -m opendp3 export data\recordings.sqlite artifacts\incident-001 --incident 1
-    .\.venv\Scripts\python.exe -m opendp3 export data\recordings.sqlite artifacts\private-export --raw
+    .\.venv\Scripts\python.exe -m openpowerstation scan
+    .\.venv\Scripts\python.exe -m openpowerstation jackery-scan --seconds 15
+    .\.venv\Scripts\python.exe -m openpowerstation jackery-status --seconds 30
+    .\.venv\Scripts\python.exe -m openpowerstation --data-dir data setup
+    .\.venv\Scripts\python.exe -m openpowerstation --data-dir data setup --login
+    .\.venv\Scripts\python.exe -m openpowerstation --data-dir data record --hours 8
+    .\.venv\Scripts\python.exe -m openpowerstation --data-dir data jackery-record --interval 3
+    .\.venv\Scripts\python.exe -m openpowerstation --data-dir data jackery-compact
+    .\.venv\Scripts\python.exe -m openpowerstation --data-dir data jackery-bridge --interval 60
+    .\.venv\Scripts\python.exe -m openpowerstation --data-dir data gui
+    .\.venv\Scripts\python.exe -m openpowerstation --data-dir data bridge --dry-run
+    .\.venv\Scripts\python.exe -m openpowerstation --data-dir data bridge
+    .\.venv\Scripts\python.exe -m openpowerstation demo --database artifacts\example.sqlite
+    .\.venv\Scripts\python.exe -m openpowerstation replay artifacts\example.sqlite --verify
+    .\.venv\Scripts\python.exe -m openpowerstation export data\recordings.sqlite artifacts\incident-001 --incident 1
+    .\.venv\Scripts\python.exe -m openpowerstation export data\recordings.sqlite artifacts\private-export --raw
 
 Do not pass passwords or user IDs on command lines. Setup prompts locally.
 
@@ -1020,8 +1020,8 @@ sensor ever reported.
 Thinning runs automatically inside the recorder. To inspect or run it by hand, stop
 the recorder first — it holds the database's single-writer lock — and use:
 
-    .\.venv\Scripts\python.exe -m opendp3 --data-dir data jackery-compact
-    .\.venv\Scripts\python.exe -m opendp3 --data-dir data jackery-compact --apply
+    .\.venv\Scripts\python.exe -m openpowerstation --data-dir data jackery-compact
+    .\.venv\Scripts\python.exe -m openpowerstation --data-dir data jackery-compact --apply
 
 Without `--apply` it deletes nothing and only reports what it would remove.
 

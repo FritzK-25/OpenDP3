@@ -1,5 +1,5 @@
 from pathlib import Path
-from opendp3.gui import Window
+from openpowerstation.gui import Window
 from conftest import close_window, pump
 
 def test_desktop_playback_fields_markers_and_capture(qtbot,tmp_path,demo_database):
@@ -26,8 +26,8 @@ def test_desktop_playback_fields_markers_and_capture(qtbot,tmp_path,demo_databas
 
 def test_background_view_can_stop_only_matching_qualification(qtbot,tmp_path,packet):
     import json
-    from opendp3.storage import Store
-    from opendp3.recorder import Recorder
+    from openpowerstation.storage import Store
+    from openpowerstation.recorder import Recorder
     from conftest import add
     path=tmp_path/'live.sqlite'
     with Store(path,reserve_bytes=0) as store:

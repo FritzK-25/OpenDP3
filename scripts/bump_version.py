@@ -9,7 +9,7 @@
 Examples above use placeholder numbers on purpose: a literal current version in
 this file would be one more place to forget to update.
 
-Touches exactly one line in src/opendp3/__init__.py. Everything else — the
+Touches exactly one line in src/openpowerstation/__init__.py. Everything else — the
 packaging metadata, the Windows version resource, the release filename and the
 verification assertions — derives from it at build time.
 
@@ -23,7 +23,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SOURCE = ROOT / "src" / "opendp3" / "__init__.py"
+SOURCE = ROOT / "src" / "openpowerstation" / "__init__.py"
 PATTERN = re.compile(r'^__version__ = "(\d+)\.(\d+)\.(\d+)"$', re.MULTILINE)
 PARTS = {"major": 0, "minor": 1, "patch": 2}
 

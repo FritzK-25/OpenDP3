@@ -9,8 +9,8 @@ import os
 
 import pytest
 
-from opendp3 import dpapi
-from opendp3.config import Config, load_config, save_config
+from openpowerstation import dpapi
+from openpowerstation.config import Config, load_config, save_config
 
 
 pytestmark = pytest.mark.skipif(os.name != "nt", reason="real Windows DPAPI")

@@ -1,6 +1,6 @@
 """Viewer preferences in ``<root>/ui.json``.
 
-Deliberately separate from :mod:`opendp3.config`: ``Config`` is strictly validated
+Deliberately separate from :mod:`openpowerstation.config`: ``Config`` is strictly validated
 and requires a paired DP3, so a viewer that has only ever opened a synthetic demo
 has no ``config.json`` at all and would have nowhere to keep a theme choice.
 

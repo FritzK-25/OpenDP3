@@ -5,12 +5,12 @@ from types import SimpleNamespace
 import ecdsa
 import pytest
 
-from opendp3.protocol import (OutboundGate,PolicyError,ProtocolError,WireBuffer,
+from openpowerstation.protocol import (OutboundGate,PolicyError,ProtocolError,WireBuffer,
     parse_packet,auth_packet,identify,derive_session_key,Identity,AuthenticationError)
-from opendp3.vendor.packet import Packet
-from opendp3.vendor.crc import crc8
-from opendp3.vendor.encryption import Type1Encryption,Type7Encryption
-from opendp3.vendor.frame_assembler import EncPacketAssembler,RawHeaderAssembler,PassthroughAssembler,SimplePacketAssembler
+from openpowerstation.vendor.packet import Packet
+from openpowerstation.vendor.crc import crc8
+from openpowerstation.vendor.encryption import Type1Encryption,Type7Encryption
+from openpowerstation.vendor.frame_assembler import EncPacketAssembler,RawHeaderAssembler,PassthroughAssembler,SimplePacketAssembler
 
 def test_crc_corruption_and_truncation(packet):
     raw = packet(bms_max_cell_temp=0)
@@ -96,7 +96,7 @@ def test_advertisement_truncation_and_family():
 @pytest.mark.parametrize("seed", [b"\1\1", b"\0\0"])
 async def test_full_type7_auth_with_mock_device(packet, seed):
     """Both ends compute ECDH; auth notifications are split and no real BLE is used."""
-    from opendp3.ble import Session
+    from openpowerstation.ble import Session
     identity = Identity("AA:BB:CC:DD:EE:FF","MR51123456789012",7,0x13)
     s = Session(identity,object(),"123456",lambda *a:None,lambda *a:None)
     encryption = None
@@ -153,7 +153,7 @@ async def test_sustained_silence_ends_the_session(monkeypatch):
     the transport will ever raise on its own. run() has to end the session
     itself; only then does runtime.collect() reconnect.
     """
-    from opendp3 import ble
+    from openpowerstation import ble
 
     monkeypatch.setattr(ble, "SILENCE_TIMEOUT", 0.01)
     monkeypatch.setattr(ble, "SILENCE_LIMIT", 2)
@@ -201,7 +201,7 @@ async def test_sustained_silence_ends_the_session(monkeypatch):
 
 async def test_resumed_telemetry_resets_the_silence_count(monkeypatch):
     """One late frame must not leave the session one timeout from teardown."""
-    from opendp3 import ble
+    from openpowerstation import ble
 
     monkeypatch.setattr(ble, "SILENCE_TIMEOUT", 0.01)
     monkeypatch.setattr(ble, "SILENCE_LIMIT", 2)
@@ -258,7 +258,7 @@ async def test_a_silent_round_lasts_the_whole_configured_timeout():
     freshness window, tearing the session down over gaps Home Assistant still
     considered current.
     """
-    from opendp3 import ble
+    from openpowerstation import ble
 
     identity = Identity("AA:BB:CC:DD:EE:FF", "MR51123456789012", 7, 0x13)
     s = ble.Session(identity, object(), "123456", lambda *a: None, lambda *a: None)

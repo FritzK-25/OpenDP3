@@ -6,10 +6,10 @@ import time
 
 import portalocker
 import pytest
-from opendp3.config import Config,save_config,load_config,resolve_user_id
-from opendp3.protocol import Identity,AuthenticationError
-from opendp3.runtime import Service
-from opendp3.storage import read_db
+from openpowerstation.config import Config,save_config,load_config,resolve_user_id
+from openpowerstation.protocol import Identity,AuthenticationError
+from openpowerstation.runtime import Service
+from openpowerstation.storage import read_db
 
 def cfg():
     return Config("AA:BB:CC:DD:EE:FF","MR51123456789012","123456")
@@ -33,8 +33,8 @@ def test_release_resume_without_implicit_reconnect(tmp_path,monkeypatch,packet):
             self.on_event("connected","local session",time.time_ns(),time.monotonic_ns())
             self.on_frame(packet(seq=len(starts),bms_max_cell_temp=23),time.time_ns(),time.monotonic_ns())
             await asyncio.Event().wait()
-    monkeypatch.setattr("opendp3.runtime.ble.scan",scan)
-    monkeypatch.setattr("opendp3.runtime.ble.Session",Session)
+    monkeypatch.setattr("openpowerstation.runtime.ble.scan",scan)
+    monkeypatch.setattr("openpowerstation.runtime.ble.Session",Session)
     s=Service(cfg(),tmp_path/"live.sqlite",lock_dir=tmp_path/"locks")
     s.start()
     try:
@@ -59,7 +59,7 @@ def test_authentication_failure_stops_no_retries(tmp_path,monkeypatch):
     async def scan(*_):
         attempts.append(1)
         raise AuthenticationError("Wrong user ID.")
-    monkeypatch.setattr("opendp3.runtime.ble.scan",scan)
+    monkeypatch.setattr("openpowerstation.runtime.ble.scan",scan)
     s=Service(cfg(),tmp_path/"live.sqlite",lock_dir=tmp_path/"locks")
     s.start(); s.join(4)
     assert not s.is_alive()
@@ -90,8 +90,8 @@ def test_saved_control_revocation_is_enforced_without_restarting_dp3(tmp_path, m
             assert self.gate.allow_control
             sent.append((field, value))
 
-    monkeypatch.setattr("opendp3.runtime.ble.scan", scan)
-    monkeypatch.setattr("opendp3.runtime.ble.Session", Session)
+    monkeypatch.setattr("openpowerstation.runtime.ble.scan", scan)
+    monkeypatch.setattr("openpowerstation.runtime.ble.Session", Session)
     service = Service(settings, tmp_path / "test.sqlite", config_path=path, lock_dir=tmp_path / "locks")
     service.start()
     try:
@@ -188,7 +188,7 @@ def test_silent_session_is_dropped_and_reacquired(tmp_path, monkeypatch, packet)
     asserts the runtime treats that as a lost transport and reacquires, rather
     than leaving the zombie link in place until someone restarts the app.
     """
-    from opendp3 import ble
+    from openpowerstation import ble
 
     starts = []
 
@@ -216,8 +216,8 @@ def test_silent_session_is_dropped_and_reacquired(tmp_path, monkeypatch, packet)
                 if silent_rounds >= ble.SILENCE_LIMIT:
                     raise ConnectionError("No telemetry while still connected.")
 
-    monkeypatch.setattr("opendp3.runtime.ble.scan", scan)
-    monkeypatch.setattr("opendp3.runtime.ble.Session", Session)
+    monkeypatch.setattr("openpowerstation.runtime.ble.scan", scan)
+    monkeypatch.setattr("openpowerstation.runtime.ble.Session", Session)
     s = Service(cfg(), tmp_path / "live.sqlite", lock_dir=tmp_path / "locks")
     s.start()
     try:

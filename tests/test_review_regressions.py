@@ -6,15 +6,15 @@ from types import SimpleNamespace
 
 import pytest
 
-from opendp3.bridge import Bridge, state_payload, discovery_payloads
-from opendp3.cli import _jackery_ble_loop
-from opendp3.config import Config, save_config
-from opendp3.exporting import export_evidence
-from opendp3.jackery_bridge import JackeryBridge, state_payload as jackery_payload
-from opendp3.jackery_fields import map_properties
-from opendp3.queries import latest, snapshot
-from opendp3.recorder import Recorder
-from opendp3.storage import Store
+from openpowerstation.bridge import Bridge, state_payload, discovery_payloads
+from openpowerstation.cli import _jackery_ble_loop
+from openpowerstation.config import Config, save_config
+from openpowerstation.exporting import export_evidence
+from openpowerstation.jackery_bridge import JackeryBridge, state_payload as jackery_payload
+from openpowerstation.jackery_fields import map_properties
+from openpowerstation.queries import latest, snapshot
+from openpowerstation.recorder import Recorder
+from openpowerstation.storage import Store
 
 SERIAL = "123456789012345"
 UTC = 1_800_000_000_000_000_000
@@ -89,7 +89,7 @@ def test_jackery_checks_policy_when_executing_each_request(tmp_path, monkeypatch
     async def discover(*_):
         return reader
 
-    monkeypatch.setattr("opendp3.jackery.discover_reader", discover)
+    monkeypatch.setattr("openpowerstation.jackery.discover_reader", discover)
     with Store(tmp_path / "jackery.sqlite", reserve_bytes=0) as store:
         asyncio.run(_jackery_ble_loop(store, 3, None, SERIAL, stop, config_path=setup))
         kinds = [row[0] for row in store.conn.execute("SELECT kind FROM events")]
@@ -99,7 +99,7 @@ def test_jackery_checks_policy_when_executing_each_request(tmp_path, monkeypatch
 
 
 def test_bridge_follows_restart_even_if_new_session_first_frame_is_delayed(tmp_path, monkeypatch):
-    monkeypatch.setattr("opendp3.jackery_bridge.time.time_ns", lambda: UTC + 10**9)
+    monkeypatch.setattr("openpowerstation.jackery_bridge.time.time_ns", lambda: UTC + 10**9)
     client = Client()
     path = tmp_path / "jackery.sqlite"
     bridge = JackeryBridge(config(), path, serial=SERIAL, client=client)
@@ -141,7 +141,7 @@ def test_field_discovery_marks_null_unavailable_including_diagnostic_measurement
 
 
 def test_jackery_backfill_preserves_field_age(tmp_path, monkeypatch):
-    monkeypatch.setattr("opendp3.jackery_bridge.time.time_ns", lambda: UTC + 50*10**9)
+    monkeypatch.setattr("openpowerstation.jackery_bridge.time.time_ns", lambda: UTC + 50*10**9)
     path = tmp_path / "test.sqlite"
     client = Client()
     with Store(path, reserve_bytes=0) as store:
@@ -223,7 +223,7 @@ def test_an_unmapped_jackery_read_does_not_kill_the_collector(tmp_path, monkeypa
     async def discover(*_):
         return reader
 
-    monkeypatch.setattr("opendp3.jackery.discover_reader", discover)
+    monkeypatch.setattr("openpowerstation.jackery.discover_reader", discover)
     with Store(tmp_path / "jackery.sqlite", reserve_bytes=0) as store:
         # No exception: the loop rides out the unmapped read and records the
         # next good one.
@@ -239,7 +239,7 @@ def test_an_unmapped_jackery_read_does_not_kill_the_collector(tmp_path, monkeypa
 
 def test_repeated_unmapped_jackery_reads_reacquire_the_link(tmp_path, monkeypatch):
     """Persistent nonsense is a bad session, and is recovered as one."""
-    from opendp3.cli import UNMAPPED_READ_LIMIT
+    from openpowerstation.cli import UNMAPPED_READ_LIMIT
 
     stop = tmp_path / "stop"
     attaches = []
@@ -272,7 +272,7 @@ def test_repeated_unmapped_jackery_reads_reacquire_the_link(tmp_path, monkeypatc
         # which is exactly what a reattach is for.
         return Reader() if len(attaches) == 1 else GoodReader()
 
-    monkeypatch.setattr("opendp3.jackery.discover_reader", discover)
+    monkeypatch.setattr("openpowerstation.jackery.discover_reader", discover)
     with Store(tmp_path / "jackery.sqlite", reserve_bytes=0) as store:
         asyncio.run(_jackery_ble_loop(store, 1, None, SERIAL, stop))
         rows = list(store.conn.execute("SELECT kind FROM events"))
@@ -317,7 +317,7 @@ def test_an_unmapped_read_before_any_reading_still_recovers(tmp_path, monkeypatc
     async def discover(*_):
         return reader
 
-    monkeypatch.setattr("opendp3.jackery.discover_reader", discover)
+    monkeypatch.setattr("openpowerstation.jackery.discover_reader", discover)
     with Store(tmp_path / "jackery.sqlite", reserve_bytes=0) as store:
         asyncio.run(_jackery_ble_loop(store, 1, None, SERIAL, stop))
         frames = store.conn.execute("SELECT COUNT(*) FROM frames").fetchone()[0]

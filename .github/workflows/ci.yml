@@ -102,13 +102,13 @@ jobs:
         run: |
           docker run --rm --platform ${{ matrix.platform }} -e EXPECTED_MACHINE=${{ matrix.machine }} \
             opendp3-app:ci python -c "
-          import json, opendp3, opendp3.cli, opendp3.bridge, opendp3.jackery_bridge, opendp3.recorder
+          import json, openpowerstation, openpowerstation.cli, openpowerstation.bridge, openpowerstation.jackery_bridge, openpowerstation.recorder
           import run, linux_worker, bluetooth_status
           provenance = json.load(open('/opt/opendp3/SOURCE-PROVENANCE.json'))
-          assert provenance['version'] == opendp3.__version__, provenance
+          assert provenance['version'] == openpowerstation.__version__, provenance
           import os, platform
           assert platform.machine() == os.environ['EXPECTED_MACHINE'], platform.machine()
-          print('OpenPowerstation', opendp3.__version__, platform.machine(), 'image OK')
+          print('OpenPowerstation', openpowerstation.__version__, platform.machine(), 'image OK')
           "
 
   # One stable check name over the per-architecture builds, so branch

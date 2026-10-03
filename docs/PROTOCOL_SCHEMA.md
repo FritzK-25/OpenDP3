@@ -14,7 +14,7 @@ This file contains no account configuration, actual telemetry, or captured paylo
 - 12 enums, 68 named enum values.
 - 42 normalized field names: 38 direct display fields and 4 conditional extra-battery values.
 
-Sources: [pinned upstream schema module](https://github.com/rabits/ha-ef-ble/blob/7cde8e5922589b5e3c81585890b5188747f5b037/custom_components/ef_ble/eflib/pb/mr521_pb2.py), [pinned DP3 handler](https://github.com/rabits/ha-ef-ble/blob/7cde8e5922589b5e3c81585890b5188747f5b037/custom_components/ef_ble/eflib/devices/delta_pro_3.py), [local decoder](../src/opendp3/decoder.py). Schema identifiers and structure originate
+Sources: [pinned upstream schema module](https://github.com/rabits/ha-ef-ble/blob/7cde8e5922589b5e3c81585890b5188747f5b037/custom_components/ef_ble/eflib/pb/mr521_pb2.py), [pinned DP3 handler](https://github.com/rabits/ha-ef-ble/blob/7cde8e5922589b5e3c81585890b5188747f5b037/custom_components/ef_ble/eflib/devices/delta_pro_3.py), [local decoder](../src/openpowerstation/decoder.py). Schema identifiers and structure originate
 from ha-ef-ble under Apache-2.0; see [notices](../THIRD_PARTY_NOTICES.md).
 
 ## How to read this inventory

@@ -11,9 +11,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from google.protobuf.descriptor import FieldDescriptor
-from opendp3 import DECODER_VERSION, UPSTREAM_REVISION
-from opendp3.decoder import FIELDS, FIELD_MAP, UNAVAILABLE
-from opendp3.vendor.pb import mr521_pb2
+from openpowerstation import DECODER_VERSION, UPSTREAM_REVISION
+from openpowerstation.decoder import FIELDS, FIELD_MAP, UNAVAILABLE
+from openpowerstation.vendor.pb import mr521_pb2
 
 
 def messages():
@@ -78,7 +78,7 @@ def render():
         f"{len(FIELDS)-len(direct)} conditional extra-battery values.", "",
         f"Sources: [pinned upstream schema module]({upstream}/pb/mr521_pb2.py), "
         f"[pinned DP3 handler]({upstream}/devices/delta_pro_3.py), "
-        "[local decoder](../src/opendp3/decoder.py). Schema identifiers and structure originate",
+        "[local decoder](../src/openpowerstation/decoder.py). Schema identifiers and structure originate",
         "from ha-ef-ble under Apache-2.0; see [notices](../THIRD_PARTY_NOTICES.md).", "",
         "## How to read this inventory", "",
         "- A tag is a protobuf field number within that message, not a fault code or BLE command ID.",

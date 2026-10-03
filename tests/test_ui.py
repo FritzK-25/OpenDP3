@@ -11,17 +11,17 @@ from pathlib import Path
 
 import pytest
 
-from opendp3 import DECODER_VERSION, __version__
-from opendp3.config import load_config
-from opendp3.exporting import export_evidence
-from opendp3.gui import Window
-from opendp3.ui import prefs, theme
-from opendp3.ui.pages.exports import list_bundles
-from opendp3.ui.widgets import NO_VALUE, Pill, StatCard
+from openpowerstation import DECODER_VERSION, __version__
+from openpowerstation.config import load_config
+from openpowerstation.exporting import export_evidence
+from openpowerstation.gui import Window
+from openpowerstation.ui import prefs, theme
+from openpowerstation.ui.pages.exports import list_bundles
+from openpowerstation.ui.widgets import NO_VALUE, Pill, StatCard
 
 from conftest import close_window, pump
 
-UI_ROOT = Path(__file__).resolve().parents[1] / "src" / "opendp3" / "ui"
+UI_ROOT = Path(__file__).resolve().parents[1] / "src" / "openpowerstation" / "ui"
 HEX = re.compile(r"#[0-9a-fA-F]{3,8}\b")
 DEMO_FRAMES = 882
 
@@ -441,8 +441,8 @@ def test_button_enable_matrix(demo):
 def test_background_recorder_locks_the_viewer(qtbot, tmp_path, packet):
     """A qualification run owned by another process may only be stopped, not started."""
     from conftest import add
-    from opendp3.recorder import Recorder
-    from opendp3.storage import Store
+    from openpowerstation.recorder import Recorder
+    from openpowerstation.storage import Store
     path = tmp_path / "live.sqlite"
     with Store(path, reserve_bytes=0) as store:
         recorder = Recorder(store)

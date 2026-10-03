@@ -4,13 +4,13 @@ import json
 
 import pytest
 
-from opendp3.jackery import (
+from openpowerstation.jackery import (
     JACKERY_CONTROLS,
     jackery_control_command,
     jackery_control_readback_matches,
     jackery_control_value,
 )
-from opendp3.jackery_bridge import discovery_payloads, state_payload
+from openpowerstation.jackery_bridge import discovery_payloads, state_payload
 
 
 def _command_body(command: str) -> dict:
