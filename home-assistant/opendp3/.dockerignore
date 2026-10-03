@@ -1,0 +1,7 @@
+__pycache__
+*.pyc
+*.sqlite*
+*.log
+config.json
+import.json
+options.json

@@ -1,0 +1,47 @@
+import os
+os.environ.setdefault("QT_QPA_PLATFORM","offscreen")
+os.environ.setdefault("MPLCONFIGDIR",os.path.abspath("artifacts/matplotlib"))
+import time
+import pytest
+from opendp3.vendor.packet import Packet
+from opendp3.vendor.pb.mr521_pb2 import DisplayPropertyUpload
+
+@pytest.fixture
+def packet():
+    def make(seq=1, **values):
+        return Packet(2,0x21,0xFE,0x15,DisplayPropertyUpload(**values).SerializeToString(),
+                      seq=seq.to_bytes(4,"little")).to_bytes()
+    return make
+
+@pytest.fixture
+def evidence(tmp_path):
+    from opendp3.recorder import Recorder
+    from opendp3.storage import Store
+    with Store(tmp_path/"recording.sqlite",reserve_bytes=0) as store:
+        recorder = Recorder(store,utc_ns=1_000_000_000_000_000_000,mono_ns=0)
+        yield store,recorder
+
+def add(rec,raw,t,wall_offset=0):
+    rec.ingest(raw,rec.start_utc+int((t+wall_offset)*1e9),rec.start_mono+int(t*1e9))
+
+def pump(predicate, timeout=8.0):
+    """Spin the Qt event loop until predicate() is true. Returns its final value.
+
+    Deliberately not qtbot.waitUntil: that goes through QTest.qWait, which aborts
+    the process on Windows when one of the window's Job worker threads is still
+    running. A plain processEvents loop is safe and just as deterministic.
+    """
+    from PySide6.QtWidgets import QApplication
+    deadline = time.monotonic() + timeout
+    while not predicate() and time.monotonic() < deadline:
+        QApplication.processEvents()
+        time.sleep(.005)
+    QApplication.processEvents()
+    return predicate()
+
+def close_window(window, timeout=8.0):
+    """Shut a Window down the way the application itself does."""
+    window.timer.stop()
+    assert pump(lambda: not window.jobs, timeout), "worker jobs did not finish"
+    window.force_exit = True
+    window.close()
