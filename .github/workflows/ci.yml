@@ -72,7 +72,7 @@ jobs:
   # Every architecture config.yaml ships. aarch64 (the Raspberry Pi) builds and
   # runs under QEMU emulation on the x86 runner, so an install that fails only
   # on arm64 shows up here rather than on a user's device.
-  home-assistant-app:
+  home-assistant-image:
     strategy:
       fail-fast: false
       matrix:
@@ -83,7 +83,7 @@ jobs:
           - arch: aarch64
             platform: linux/arm64
             machine: aarch64
-    name: home-assistant-app (${{ matrix.arch }})
+    name: home-assistant-image (${{ matrix.arch }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -110,3 +110,19 @@ jobs:
           assert platform.machine() == os.environ['EXPECTED_MACHINE'], platform.machine()
           print('OpenDP3', opendp3.__version__, platform.machine(), 'image OK')
           "
+
+  # One stable check name over the per-architecture builds, so branch
+  # protection can require "home-assistant-app" however many architectures
+  # the matrix grows. Fails unless every image build succeeded.
+  home-assistant-app:
+    needs: home-assistant-image
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every architecture built and imported
+        env:
+          RESULT: ${{ needs.home-assistant-image.result }}
+        run: |
+          echo "home-assistant-image: $RESULT"
+          test "$RESULT" = success
