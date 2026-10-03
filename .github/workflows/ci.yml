@@ -29,7 +29,7 @@ jobs:
       - name: Test
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -m pytest -q --durations=25
+        run: python -m pytest -v --durations=25 -o faulthandler_timeout=240
       - name: Protocol reference is current
         run: python scripts/generate_protocol_reference.py --check
       - name: Home Assistant app copy is current
