@@ -1,11 +1,10 @@
 from pathlib import Path
 from PySide6.QtCore import Qt
 from opendp3.gui import Window
-from opendp3.demo import make_demo
 from conftest import close_window, pump
 
-def test_desktop_playback_fields_markers_and_capture(qtbot,tmp_path):
-    db=make_demo(tmp_path/"demo.sqlite",seconds=900)
+def test_desktop_playback_fields_markers_and_capture(qtbot,tmp_path,demo_database):
+    db=demo_database(tmp_path/"demo.sqlite",seconds=900)
     w=Window(tmp_path,db); qtbot.addWidget(w); w.show()
     assert pump(lambda:w.snap.get("count")==882,timeout=10)
     assert w.badge.text()=="SYNTHETIC DEMO"

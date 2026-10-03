@@ -6,7 +6,6 @@ from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
 from PySide6.QtGui import QMouseEvent, QWheelEvent
 from PySide6.QtWidgets import QApplication
 
-from opendp3.demo import make_demo
 from opendp3.gui import Window
 from opendp3.ui.charts import elapsed_text, nearest_sample, sample_value, value_range
 from opendp3.ui.widgets import ChartPanel
@@ -14,8 +13,8 @@ from conftest import close_window, pump
 
 
 @pytest.fixture
-def viewer(qtbot, tmp_path):
-    window = Window(tmp_path, make_demo(tmp_path / "charts.sqlite"))
+def viewer(qtbot, tmp_path, demo_database):
+    window = Window(tmp_path, demo_database(tmp_path / "charts.sqlite"))
     qtbot.addWidget(window)
     window.show()
     window.timer.stop()
