@@ -28,7 +28,7 @@ try {
 
     if (-not $SkipTests) {
         Write-Output "--- Tests"
-        & $pythonExe -m pytest tests -q
+        & $pythonExe -m pytest tests -q -n auto
         if ($LASTEXITCODE -ne 0) { throw "Tests failed; not building." }
     }
 
