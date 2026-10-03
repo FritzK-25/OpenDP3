@@ -10,7 +10,7 @@ description = "Local Bluetooth telemetry, history and Home Assistant bridge for 
 requires-python = ">=3.12"
 # Headless collectors, bridges and the CLI. This is what the production add-on
 # installs, so anything added here ships to the Pi. Rendering and desktop
-# packages belong in the extras below; apps/opendp3/requirements-headless.txt
+# packages belong in the extras below; home-assistant/opendp3/requirements-headless.txt
 # pins this same set and tests/test_packaging_extras.py fails if the two drift.
 dependencies = ["bleak>=1,<4", "ecdsa>=0.19,<0.20", "pycryptodome>=3.23,<4", "protobuf>=6.30,<8", "platformdirs>=4,<5", "portalocker>=3,<5", "httpx>=0.28,<1", "paho-mqtt>=2,<3"]
 

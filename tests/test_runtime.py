@@ -1,9 +1,11 @@
 import asyncio
 import json
+import os
 from types import SimpleNamespace
 import time
 
 import portalocker
+import pytest
 from conftest import add
 from opendp3.config import Config,save_config,load_config,resolve_user_id
 from opendp3.protocol import Identity,AuthenticationError
@@ -140,6 +142,7 @@ def test_setup_persists_only_permitted_config(tmp_path):
     # credential the bridge needs stays empty until it is deliberately set.
     assert stored["mqtt_password"]==""
 
+@pytest.mark.skipif(os.name != "nt", reason="real Windows DPAPI")
 def test_broker_password_is_written_to_exactly_one_field(tmp_path):
     # DPAPI-protected at rest (see config.py, docs/SECURITY.md): no field
     # holds the plaintext value, and the encrypted form lives in exactly the

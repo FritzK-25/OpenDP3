@@ -10,45 +10,47 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write
-  id-token: write
-  attestations: write
+  contents: read
 
 jobs:
-  windows:
-    runs-on: windows-latest
+  version:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install build environment
-        shell: pwsh
-        run: |
-          python -m venv .venv
-          .\.venv\Scripts\python.exe -m pip install -r requirements.lock
-          .\.venv\Scripts\python.exe -m pip install --no-deps -e .
-          .\.venv\Scripts\python.exe -m pip install -r packaging/requirements-build.txt
-          .\.venv\Scripts\python.exe -m pip install pytest pytest-asyncio pytest-qt
       - name: Tag matches the package version
-        shell: pwsh
         run: |
-          $version = (.\.venv\Scripts\python.exe packaging/project_version.py).Trim()
-          if ("v$version" -ne "${{ github.ref_name }}") { throw "Tag ${{ github.ref_name }} does not match package version $version." }
-      - name: Test, build and verify
-        shell: pwsh
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: .\packaging\release.ps1
+          version=$(python3 packaging/project_version.py)
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package version $version."
+            exit 1
+          fi
+
+  windows:
+    needs: version
+    uses: ./.github/workflows/windows-build.yml
+
+  publish:
+    needs: windows
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-executable
+      - name: Hash matches the executable
+        run: sha256sum --check OpenDP3-*.exe.sha256
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: OpenDP3-*.exe
       - name: Draft release
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ github.ref_name }}" OpenDP3-*.exe OpenDP3-*.exe.sha256 `
-            --draft --prerelease --title "OpenDP3 ${{ github.ref_name }}" `
+          gh release create "$GITHUB_REF_NAME" OpenDP3-*.exe OpenDP3-*.exe.sha256 \
+            --repo "$GITHUB_REPOSITORY" \
+            --draft --prerelease --title "OpenDP3 $GITHUB_REF_NAME" \
             --notes "Public preview. Verify the download against the .sha256 file. See the README for known limits."
