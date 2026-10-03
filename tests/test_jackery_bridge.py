@@ -133,6 +133,28 @@ def test_enabled_jackery_bridge_announces_and_queues_controls(tmp_path):
     }
 
 
+def test_jackery_control_queue_is_bounded_without_collector(tmp_path, monkeypatch):
+    """The recorder drains only while attached, so presses must not pile up."""
+    from opendp3.bridge import CONTROL_QUEUE_MAX_FILES
+    database = tmp_path / "jackery.sqlite"
+    config = Config(address="AA:BB:CC:DD:EE:FF", serial=SERIAL, user_id="0",
+                    mqtt_host="broker.invalid", allow_control=True)
+    bridge = JackeryBridge(config, database, serial=SERIAL, client=FakeClient())
+    total = CONTROL_QUEUE_MAX_FILES + 25
+    ticks = iter(10**18 + index for index in range(total))
+    monkeypatch.setattr("opendp3.bridge.time.time_ns", lambda: next(ticks))
+
+    for index in range(total):
+        bridge.queue_control("jackery_ac_output", "ON" if index == total - 1 else "OFF")
+
+    queued = sorted((tmp_path / "jackery-commands").glob("*.json"))
+    assert len(queued) == CONTROL_QUEUE_MAX_FILES
+    assert queued[0].name.startswith(str(10**18 + total - CONTROL_QUEUE_MAX_FILES))
+    assert json.loads(queued[-1].read_text("utf-8")) == {
+        "control": "jackery_ac_output", "value": True
+    }
+
+
 def test_every_jackery_control_stays_discovered_even_when_writes_are_disabled():
     # Control definitions are structural. Whether they can act is a separate
     # retained availability topic, so a rebuild or BLE outage cannot delete the
