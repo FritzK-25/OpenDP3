@@ -1,0 +1,29 @@
+#!/bin/sh
+# Gate every commit on the test suite (~16s). Install with:
+#     .venv/Scripts/python.exe scripts/install_hooks.py
+#
+# Bypass for a genuine work-in-progress commit with:  git commit --no-verify
+#
+# The suite is the fast feedback loop. Building the executable is not: that runs
+# from packaging/release.ps1 when you decide to cut a build.
+set -e
+
+root=$(git rev-parse --show-toplevel)
+python="$root/.venv/Scripts/python.exe"
+if [ ! -x "$python" ]; then
+    python=$(command -v python3 || command -v python)
+fi
+if [ -z "$python" ]; then
+    echo "pre-commit: no Python interpreter found; skipping tests." >&2
+    exit 0
+fi
+
+echo "pre-commit: running tests..."
+# Own temp dir and no cache writes: the hook must not litter the working tree.
+if ! "$python" -m pytest "$root/tests" -q -p no:cacheprovider \
+        --basetemp="$root/artifacts/pytest-precommit"; then
+    echo "" >&2
+    echo "pre-commit: tests failed. Fix them, or commit with --no-verify." >&2
+    exit 1
+fi
+rm -rf "$root/artifacts/pytest-precommit"

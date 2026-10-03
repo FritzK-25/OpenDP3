@@ -1,0 +1,3 @@
+# Backward-compatible installer entrypoint. The pinned Windows environment lives
+# in requirements.txt so Dependabot can maintain it.
+-r requirements.txt
