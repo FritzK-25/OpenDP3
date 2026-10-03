@@ -74,12 +74,26 @@ def demo_database(tmp_path_factory):
     the 900 s demo. That is under a second on Linux but several seconds on a
     Windows runner, paid again by every GUI test, and was most of the Windows
     suite's run time. Each test still gets its own file to change.
+
+    Under pytest-xdist each worker is a session of its own. The workers' temp
+    directories share a parent, so the first worker to need a length builds it
+    there under a lock and the others copy it, rather than every worker
+    building it at once on a contended disk.
     """
+    import portalocker
     from opendp3.demo import make_demo
+    root = tmp_path_factory.getbasetemp()
+    if os.environ.get("PYTEST_XDIST_WORKER"):
+        root = root.parent
     built = {}
     def copy(path, seconds=900):
         if seconds not in built:
-            built[seconds] = make_demo(tmp_path_factory.mktemp("demo")/"demo.sqlite", seconds=seconds)
+            target = root/f"demo-{seconds}.sqlite"
+            with portalocker.Lock(root/f"demo-{seconds}.lock", timeout=600):
+                if not target.exists():
+                    staging = tmp_path_factory.mktemp("demo")/"demo.sqlite"
+                    os.replace(make_demo(staging, seconds=seconds), target)
+            built[seconds] = target
         shutil.copyfile(built[seconds], path)
         return path
     return copy
