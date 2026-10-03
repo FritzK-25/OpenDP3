@@ -12,6 +12,12 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import privacy_check  # noqa: E402
 
+# The repository scan covers this file too, so the personal-looking values the
+# tests feed the checker are assembled at run time rather than written out.
+AT = "@"
+PERSONAL = "a.person" + AT + "gmail.com"
+OTHER = "x.person" + AT + "gmail.com"
+
 
 def test_the_repository_contains_no_personal_identifiers():
     assert privacy_check.scan_files(privacy_check.tracked_files(), ROOT) == [], \
@@ -19,16 +25,16 @@ def test_the_repository_contains_no_personal_identifiers():
 
 
 @pytest.mark.parametrize("text", [
-    "contact someone.real@gmail.com",
-    "broker at 192.168.1.20",
-    "host 10.0.0.5 and 172.20.3.4",
-    "adapter 3C:71:BF:12:34:56",
-    "adapter 3c-71-bf-12-34-56",
-    "serial MR51A1B2C3D4E5F6",
-    r"C:\Users\somebody\AppData",
-    "C:/Users/somebody/data",
-    "http://garage-pi.local:8123",
-    "nas.lan",
+    "contact someone.real" + AT + "gmail.com",
+    "broker at 192.168" + ".1.20",
+    "host 10.0" + ".0.5 and 172.20" + ".3.4",
+    "adapter " + ":".join(["3C", "71", "BF", "12", "34", "56"]),
+    "adapter " + "-".join(["3c", "71", "bf", "12", "34", "56"]),
+    "serial MR51" + "A1B2C3D4E5F6",
+    "C:" + r"\Users\somebody\AppData",
+    "C:" + "/Users/somebody/data",
+    "http://garage-pi" + ".local:8123",
+    "nas" + ".lan",
 ])
 def test_personal_identifiers_are_found(text):
     assert privacy_check.findings_in_text(text), text
@@ -63,11 +69,11 @@ def test_deny_file_skips_comments_and_blank_lines(tmp_path):
 
 
 def test_path_scan_reports_file_and_line(tmp_path):
-    (tmp_path / "notes.md").write_text("fine\nmail me at a.person@gmail.com\n", "utf-8")
-    (tmp_path / "picture.png").write_bytes(b"a.person@gmail.com")
+    (tmp_path / "notes.md").write_text(f"fine\nmail me at {PERSONAL}\n", "utf-8")
+    (tmp_path / "picture.png").write_bytes(PERSONAL.encode())
     assert privacy_check.main(["--path", str(tmp_path)]) == 1
     problems = privacy_check.scan_files(privacy_check.files_under(tmp_path), tmp_path)
-    assert problems == ["notes.md:2: email address a.person@gmail.com"]
+    assert problems == [f"notes.md:2: email address {PERSONAL}"]
 
 
 def _git(repo, *args, env=None):
@@ -80,8 +86,8 @@ def test_commit_check_rejects_a_personal_author_email(tmp_path, monkeypatch):
     _git(repo, "init", "-q")
     for email, message in (
         ("someone@users.noreply.github.com", "first"),
-        ("a.person@gmail.com", "second"),
-        ("someone@users.noreply.github.com", "third\n\nCo-authored-by: X <x.person@gmail.com>"),
+        (PERSONAL, "second"),
+        ("someone@users.noreply.github.com", f"third\n\nCo-authored-by: X <{OTHER}>"),
     ):
         env = {**os.environ, "GIT_AUTHOR_NAME": "Someone", "GIT_COMMITTER_NAME": "Someone",
                "GIT_AUTHOR_EMAIL": email, "GIT_COMMITTER_EMAIL": email}
@@ -91,8 +97,8 @@ def test_commit_check_rejects_a_personal_author_email(tmp_path, monkeypatch):
     problems = privacy_check.commit_problems("HEAD~2..HEAD")
 
     assert len(problems) == 3, problems
-    assert sum("author email a.person@gmail.com" in p for p in problems) == 1
-    assert sum("committer email a.person@gmail.com" in p for p in problems) == 1
-    assert sum("email address x.person@gmail.com" in p for p in problems) == 1
+    assert sum(f"author email {PERSONAL}" in p for p in problems) == 1
+    assert sum(f"committer email {PERSONAL}" in p for p in problems) == 1
+    assert sum(f"email address {OTHER}" in p for p in problems) == 1
     assert privacy_check.commit_problems("HEAD~2..HEAD~1") != []
     assert privacy_check.commit_problems("HEAD~2") == []
