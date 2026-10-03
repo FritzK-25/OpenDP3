@@ -69,6 +69,16 @@ class FreshnessState:
     started_mono_ns: int | None = None
 
 
+# Used when options.json predates an option. A fresh app has no Jackery serial,
+# so that collector defaults off. The jobs and their freshness policies must
+# read the same answer, so both go through enabled().
+COLLECTOR_DEFAULTS = {"ecoflow": True, "jackery": False}
+
+
+def enabled(options, collector) -> bool:
+    return bool(options.get(collector + "_enabled", COLLECTOR_DEFAULTS[collector]))
+
+
 def adapter_name(value) -> str:
     adapter = str(value or "hci0").strip()
     if not re.fullmatch(r"hci[0-9]+", adapter):
@@ -111,13 +121,13 @@ def job_environments(options) -> dict[str, dict[str, str]]:
 def freshness_policies(options, data: Path) -> dict[str, FreshnessPolicy]:
     policies = {}
     environments = job_environments(options)
-    if options.get("ecoflow_enabled", True):
+    if enabled(options, "ecoflow"):
         policies["ecoflow-collector"] = FreshnessPolicy(
             data / "recordings.sqlite",
             ECOFLOW_FRAME_LEASE,
             environments["ecoflow-collector"]["OPENDP3_BLE_ADAPTER"],
         )
-    if options.get("jackery_enabled", True):
+    if enabled(options, "jackery"):
         policies["jackery-collector"] = FreshnessPolicy(
             data / "jackery.sqlite",
             JACKERY_FRAME_LEASE,
@@ -159,12 +169,12 @@ def commands(options, data: Path):
     # Discovery is structural and does not depend on a live BLE session. Queue
     # every enabled MQTT publisher first, then the radio workers, so Home
     # Assistant can restore entities before either collector starts reacquiring.
-    if options.get("ecoflow_enabled", True):
+    if enabled(options, "ecoflow"):
         jobs["ecoflow-mqtt"] = prefix + ["bridge"]
         collectors["ecoflow-collector"] = worker + ["record"]
     # A fresh app has no Jackery serial, so missing legacy options default this
     # collector off rather than making the nominal package configuration invalid.
-    if options.get("jackery_enabled", False):
+    if enabled(options, "jackery"):
         serial = options.get("jackery_serial", "")
         if not isinstance(serial, str) or not re.fullmatch(r"[0-9]{15}", serial):
             raise ValueError("Set the 15-digit Jackery serial in app options.")
