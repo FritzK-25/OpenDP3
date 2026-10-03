@@ -49,6 +49,6 @@ jobs:
         with:
           name: windows-executable
           path: |
-            OpenDP3-*.exe
-            OpenDP3-*.exe.sha256
+            OpenPowerstation-*.exe
+            OpenPowerstation-*.exe.sha256
           if-no-files-found: error

@@ -1,4 +1,4 @@
-"""Keep the OpenDP3 recorder and MQTT bridges healthy.
+"""Keep the OpenPowerstation recorder and MQTT bridges healthy.
 
 This is the one process owned by the Windows ``OpenDP3 Recorder`` scheduled
 task.  It starts the detached workers through ``start_all.py`` and periodically
@@ -17,7 +17,7 @@ import time
 import portalocker
 
 # Running a file from ``scripts`` puts that directory, not the repository root,
-# on sys.path.  Add the root so the editable OpenDP3 install and start_all module
+# on sys.path.  Add the root so the editable OpenPowerstation install and start_all module
 # resolve consistently from Task Scheduler and from a developer shell.
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -144,7 +144,7 @@ def run(data: Path) -> int:
     try:
         lock.acquire()
     except (portalocker.exceptions.LockException, PermissionError, OSError):
-        logging.info("Another OpenDP3 watchdog is already running.")
+        logging.info("Another OpenPowerstation watchdog is already running.")
         return 0
     try:
         last_recovery = {}
@@ -176,7 +176,7 @@ def run(data: Path) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="OpenDP3 telemetry watchdog")
+    parser = argparse.ArgumentParser(description="OpenPowerstation telemetry watchdog")
     parser.add_argument("--data-dir", type=Path, required=True)
     args = parser.parse_args()
     args.data_dir.mkdir(parents=True, exist_ok=True)

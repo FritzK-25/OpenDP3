@@ -45,7 +45,7 @@ async def _bounded_operation(awaitable, *, backend: str, operation: str, timeout
     except Exception as exc:
         raise ConnectionError(_operation_failure(backend, operation, exc)) from exc
 
-# These are the only Jackery controls exposed by OpenDP3.  The portable
+# These are the only Jackery controls exposed by OpenPowerstation.  The portable
 # protocol has many more action IDs, including Wi-Fi and battery-boundary
 # writes; keeping this map deliberately small prevents a broker message from
 # becoming an arbitrary encrypted command.

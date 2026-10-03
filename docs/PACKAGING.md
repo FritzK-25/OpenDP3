@@ -1,6 +1,6 @@
 # Standalone Windows application
 
-Builds are named `OpenDP3-<version>.exe`, from the version in
+Builds are named `OpenPowerstation-<version>.exe`, from the version in
 `src/opendp3/__init__.py`. They use Windows x64, console-free, single-file packaging.
 It bundles Python 3.12, Qt/PySide6, PyQtGraph, SQLite, the Bluetooth backend,
 crypto/protobuf codecs, and offline chart export dependencies. No administrator
@@ -15,13 +15,13 @@ does not move account IDs or recordings.
 
 Options accepted by the desktop executable:
 
-    OpenDP3.exe --data-dir "D:\OpenDP3-data"
-    OpenDP3.exe "D:\Evidence\recording.sqlite"
+    OpenPowerstation.exe --data-dir "D:\OpenPowerstation-data"
+    OpenPowerstation.exe "D:\Evidence\recording.sqlite"
 
 The source installation retains the scan/setup/record/replay/export/gui/bridge CLI.
 The windowed executable is intended for desktop use, not console scripting. The
 Home Assistant bridge is source-only: its settings are editable in the frozen
-desktop, but running it needs the source installation (`OpenDP3-Bridge.cmd`),
+desktop, but running it needs the source installation (`OpenPowerstation-Bridge.cmd`),
 because the frozen entry point opens the viewer rather than dispatching commands.
 An existing background qualification recorder keeps running independently.
 Opening or closing its viewer does not end that recording. Use the viewer's
@@ -44,7 +44,7 @@ One command runs the whole chain: tests, then build, then frozen verification.
     .\packaging\release.ps1 -Bump patch     bump first, then build
 
 Each stage gates the next: failing tests stop the build, and a failed build stops
-verification. The result is `OpenDP3-<version>.exe` beside a matching
+verification. The result is `OpenPowerstation-<version>.exe` beside a matching
 `.exe.sha256` in the project root.
 
 `-Bump` calls `scripts/bump_version.py`, which edits one line in
@@ -52,9 +52,9 @@ verification. The result is `OpenDP3-<version>.exe` beside a matching
 filename:
 
     .\packaging\build.ps1
-    .\packaging\build.ps1 -OutputName OpenDP3.exe
+    .\packaging\build.ps1 -OutputName OpenPowerstation.exe
 
-The default output name is `OpenDP3-<version>.exe`, so a build never lands on the
+The default output name is `OpenPowerstation-<version>.exe`, so a build never lands on the
 executable an older run is still using. `build.ps1` refuses up front, before
 spending the build time, if its target file is locked by a running process, and
 warns when `data/qualification-run.json` shows a qualification run with no stop
@@ -85,7 +85,7 @@ in `src/`, `packaging/`, `scripts/`, `tests/`, or `pyproject.toml`.
 
 ## Build details
 
-The build copies dist/OpenDP3.exe to the project root and writes its SHA-256
+The build copies dist/OpenPowerstation.exe to the project root and writes its SHA-256
 checksum alongside. Close an old executable before replacing it;
 the build does not terminate applications. Pinned tools make the process
 repeatable, but the resulting binary is not claimed to be bit-for-bit
@@ -106,7 +106,7 @@ Dependency notices are available inside Help > Third-party licenses.
 
 Copy only the executable to a separate empty directory and run:
 
-    .\OpenDP3.exe --smoke-test "C:\path\to\new-smoke-output"
+    .\OpenPowerstation.exe --smoke-test "C:\path\to\new-smoke-output"
 
 The output directory must not already exist. This offline test creates a
 synthetic recording, verifies decoder replay, exercises the crypto/native
@@ -121,9 +121,9 @@ is also checked separately against the existing live database as a viewer.
 
 For automated verification of the updated release, run:
 
-    .\.venv\Scripts\python.exe packaging/verify.py --executable OpenDP3-<version>.exe
+    .\.venv\Scripts\python.exe packaging/verify.py --executable OpenPowerstation-<version>.exe
 
-Omitting `--executable` verifies `OpenDP3.exe`. `release.ps1` runs this step for
+Omitting `--executable` verifies `OpenPowerstation.exe`. `release.ps1` runs this step for
 you against the executable it just built.
 It creates a new isolated artifact directory, clears Python environment
 overrides, restricts PATH to Windows System32, runs only the copied executable,

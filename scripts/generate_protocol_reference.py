@@ -69,7 +69,7 @@ def render():
         "This file contains no account configuration, actual telemetry, or captured payloads.", "",
         f"- Source schema: `{schema.name}`; package `{schema.package}`.",
         f"- Upstream revision: `{UPSTREAM_REVISION}`.",
-        f"- OpenDP3 decoder: `{DECODER_VERSION}`.",
+        f"- OpenPowerstation decoder: `{DECODER_VERSION}`.",
         f"- Descriptor SHA-256: `{hashlib.sha256(schema.serialized_pb).hexdigest()}`.",
         f"- {len(schema.message_types_by_name)} top-level messages, {len(definitions)} including nested messages; "
         f"{sum(len(m.fields) for m in definitions)} field definitions.",
@@ -90,7 +90,7 @@ def render():
         "- Display helpers are decodable only when nested inside a supported display upload and actually present.",
         "- Known unmapped display fields are retained in local decoded JSON. Unknown protobuf tags remain only in raw frames.",
         "- Runtime fields and event-push fields are not automatically obtained by importing their schema classes.",
-        "- Apart from the two opt-in DP3 AC output fields above, DP3 commands, configuration and acknowledgements listed here are not sent by OpenDP3. Jackery controls are governed by its separate allowlist; no additional permissions are enabled by this document.",
+        "- Apart from the two opt-in DP3 AC output fields above, DP3 commands, configuration and acknowledgements listed here are not sent by OpenPowerstation. Jackery controls are governed by its separate allowlist; no additional permissions are enabled by this document.",
         "- The schema supplies no named `EventPush.LogItem.event_no` dictionary. Do not invent event IDs or map them to Error 036.", "",
         "## Normalized field catalog", "",
         "These fields can appear in numeric storage, charts/coverage and sanitized telemetry CSV when observed.",
@@ -139,7 +139,7 @@ def render():
     for message in definitions:
         lines += [f'<a id="{anchor("message", message.full_name)}"></a>', "",
                   f"### {message.full_name}", "", treatment(message) + ".", "",
-                  "| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |",
+                  "| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |",
                   "|---:|---|---|:---:|:---:|---|"]
         for field in message.fields:
             if message.full_name == display.full_name:

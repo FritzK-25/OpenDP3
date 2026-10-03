@@ -1,8 +1,8 @@
-# OpenDP3
+# OpenPowerstation
 
 ## At a glance
 
-OpenDP3 lets your Windows PC keep a history of what your EcoFlow DELTA Pro 3
+OpenPowerstation lets your Windows PC keep a history of what your EcoFlow DELTA Pro 3
 or Jackery Explorer 1000 v2 reports over Bluetooth.
 
 - **See what is happening:** view battery charge, temperature, and power going
@@ -24,7 +24,7 @@ charts and a headless recorder share the same Bluetooth, decoding, and storage
 core. No Home Assistant, web server, or cloud telemetry is required — though an
 optional bridge can publish current readings to Home Assistant if you want them.
 
-OpenDP3 helps answer: **what did the DP3 report before, during, and after a
+OpenPowerstation helps answer: **what did the DP3 report before, during, and after a
 suspicious reading or loss of communication?** It collects local Bluetooth
 notifications, preserves protocol frames, plots time-aligned measurements,
 and protects incident windows from ordinary history cleanup. It investigates
@@ -69,7 +69,7 @@ It does not connect to the battery automatically.
 Each release has a separate filename so an older executable can finish its
 current recording. Running processes are not upgraded in place; use the updated
 executable after the current run ends. Source builds default to a versioned
-filename; `-OutputName OpenDP3.exe` is an explicit override.
+filename; `-OutputName OpenPowerstation.exe` is an explicit override.
 
 If a data folder exists beside the executable, it uses that folder, including
 any existing setup and recordings. Otherwise it uses
@@ -82,7 +82,7 @@ SHA-256 checksum is alongside it in the matching `.exe.sha256` file. Do not disa
 Help > Third-party licenses lists bundled dependency notices.
 See docs/PACKAGING.md to rebuild or verify the binary.
 
-OpenDP3.cmd remains available as a developer launcher using the local .venv.
+OpenPowerstation.cmd remains available as a developer launcher using the local .venv.
 
 For a fresh checkout with Python 3.12 installed:
 
@@ -159,7 +159,7 @@ qualifications. No values are interpolated across segments, uncertain repeats,
 or long gaps. Isolated samples remain visible as points. Time navigation remains
 bounded by the recording, with a minimum one-second window.
 
-The battery must already be bound to the account using EcoFlow's app. OpenDP3
+The battery must already be bound to the account using EcoFlow's app. OpenPowerstation
 does not bind/unbind, reset, modify firmware, or alter device settings. Keep
 the PC awake, powered, and nearby. The application does not change Windows
 power settings. Sleeping or losing power interrupts collection.
@@ -175,14 +175,14 @@ These are different interfaces. The [EcoFlow developer portal](https://developer
 documents a separate service; this README is not an exhaustive catalog of
 EcoFlow's cloud products, MQTT topics, other devices, or firmware-specific
 fault codes. Here, “all events” means all categories recognized by this version
-of OpenDP3, plus the event-related definitions present in its pinned DP3 schema.
+of OpenPowerstation, plus the event-related definitions present in its pinned DP3 schema.
 
 The protocol foundation is [ha-ef-ble](https://github.com/rabits/ha-ef-ble) at
-revision `7cde8e5922589b5e3c81585890b5188747f5b037`. OpenDP3 uses its DP3 framing,
+revision `7cde8e5922589b5e3c81585890b5188747f5b037`. OpenPowerstation uses its DP3 framing,
 authentication research and `mr521.proto` definitions without requiring Home
 Assistant. The decoder version is `dp3-mr521/0.1.4+7cde8e592258`; the application
 version is `0.2.0`. Schema presence does not establish that the selected DP3
-publishes a field, that OpenDP3 knows its routing, or that its units are verified.
+publishes a field, that OpenPowerstation knows its routing, or that its units are verified.
 
 The app supports one explicitly selected DP3, with serial prefixes `MR51` or
 `MR54`. Attached-battery observations are conditional on what that DP3 exposes.
@@ -248,15 +248,15 @@ guarantee useful temperature, power, or error coverage.
 | Layer | Example | What it means |
 |---|---|---|
 | Device telemetry field | `bms_max_cell_temp`, `bms_err_code` | A field actually present in a decoded DP3 property packet. It may be a measurement, estimate, state, or raw error value. |
-| Device protocol message | `DisplayPropertyUpload`, schema-defined `EventPush` | A structured payload. Only the display-property packet currently has a verified route in OpenDP3's decoder. |
-| OpenDP3 timeline event | `suspect_telemetry`, `disconnected` | A local observation or inference recorded by the application; not an EcoFlow-issued event identifier. |
+| Device protocol message | `DisplayPropertyUpload`, schema-defined `EventPush` | A structured payload. Only the display-property packet currently has a verified route in OpenPowerstation's decoder. |
+| OpenPowerstation timeline event | `suspect_telemetry`, `disconnected` | A local observation or inference recorded by the application; not an EcoFlow-issued event identifier. |
 | Recorder/decoder status | `reconnecting`, `unknown_message` | Collection health or processing outcome. These are not battery fault codes or necessarily timeline rows. |
 
 Do not treat a raw integer as an event's meaning. In particular, a PV source
 type of `5` is not error 5, a run-state value of `1` is not a fault, and a
 numeric value of `36` is not automatically the display's **Error 036**.
 
-### Complete OpenDP3 timeline-event catalog
+### Complete OpenPowerstation timeline-event catalog
 
 The following 18 strings are recognized by the recorder/export path. Seventeen
 have production emission paths; `capture_error` is reserved as described
@@ -407,7 +407,7 @@ is sufficient to attribute corruption to EcoFlow firmware.
 The collector checks its scheduling interval on its roughly 0.2-second loop.
 An interval **greater than 10 seconds** produces this event, breaks comparison
 history, and pins an incident. Sleep is one possible explanation; a blocked or
-delayed process can look similar. OpenDP3 does not read a definitive Windows
+delayed process can look similar. OpenPowerstation does not read a definitive Windows
 sleep/resume event here and cannot prove the host slept from this label alone.
 
 #### `capture_error` — recognized, reserved category
@@ -493,7 +493,7 @@ pin an incident, and a run-state transition is not proof of a controller reboot.
 
 #### `clock_change` — Windows wall-clock discontinuity
 
-Between successive delivered frames, OpenDP3 compares the elapsed UTC time
+Between successive delivered frames, OpenPowerstation compares the elapsed UTC time
 with elapsed monotonic time. An absolute difference **greater than 2 seconds**
 creates this event. It is about the host clock, not the battery's clock.
 Charts and temperature comparisons continue on monotonic receipt time; the
@@ -582,10 +582,10 @@ are viewer coverage labels, not numeric zero or device fault statuses.
 
 This routing table is intentionally narrower than the full schema inventory.
 The pinned [upstream DP3 handler](https://github.com/rabits/ha-ef-ble/blob/7cde8e5922589b5e3c81585890b5188747f5b037/custom_components/ef_ble/eflib/devices/delta_pro_3.py)
-provides the display-property route and an automatic time-reply path. OpenDP3
+provides the display-property route and an automatic time-reply path. OpenPowerstation
 adapts the former and deliberately excludes the latter.
 
-| Message / route | OpenDP3 behavior |
+| Message / route | OpenPowerstation behavior |
 |---|---|
 | `DisplayPropertyUpload`: source `0x02`, command set `0xFE`, command `0x15` | Decode each payload independently with presence preserved; map selected numeric fields; keep other known fields locally |
 | Authentication: command set `0x35`, including status `0x89` and login `0x86` | Handle only in the constrained setup/session handshake; exclude authentication packets from evidence |
@@ -625,10 +625,10 @@ These are device-schema fields, unlike the local timeline categories above:
 The scalar fields above have protobuf presence; missing is distinct from an
 explicitly present zero. Repeated fields do not provide the same scalar
 presence distinction. `event_seq` belongs to the payload and is not the
-transport header's sequence bytes or an OpenDP3 session ID.
+transport header's sequence bytes or an OpenPowerstation session ID.
 
 **There is no verified `event_no → fault/event name` dictionary in the bundled
-schema, and OpenDP3 currently does not consume `EventPush`.** It would be
+schema, and OpenPowerstation currently does not consume `EventPush`.** It would be
 misleading to list invented “overtemperature,” “BMS reboot,” or “Error 036”
 event numbers as supported API events. The presence of `event_detail` also
 does not establish its layout. Firmware-specific routing, units, identifiers
@@ -661,7 +661,7 @@ and units before it becomes a normalized field. Configured charging limits
 and requested volts/amps must not be substituted for measured values.
 
 `ConfigReadAck` contains firmware-version fields for PD, IoT, MPPT, LLC,
-inverter and BMS controllers. OpenDP3 does not request this message; manually
+inverter and BMS controllers. OpenPowerstation does not request this message; manually
 entered firmware labels are private session metadata, not an automatic API
 version read. `PropertyUploadPeriod` defines display/runtime full/incremental
 period fields, but the recorder does not request or change them. Their schema
@@ -675,7 +675,7 @@ pinned schema, not a promise that all 749 fields are reachable on your DP3.
 
 ### Telemetry fields available to this decoder
 
-OpenDP3 maps **40 numeric field names**: 36 directly from
+OpenPowerstation maps **40 numeric field names**: 36 directly from
 `DisplayPropertyUpload`, plus four conditional extra-battery values. Firmware
 may publish only a subset. The complete field-by-field mapping, including
 tags, units and event eligibility, is in
@@ -693,7 +693,7 @@ tags, units and event eligibility, is in
 | Conditional extra batteries | `extra1_soc`, `extra2_soc` (%); `extra1_temperature`, `extra2_temperature` (°C, unverified) | No automatic temperature-jump incidents from these heuristic values |
 
 Power signs are preserved. Upstream interprets positive `pow_get_bms` as
-charging and negative as discharging; OpenDP3 retains one raw signed field
+charging and negative as discharging; OpenPowerstation retains one raw signed field
 rather than manufacturing two independently measured channels. AC output
 fields can also use negative signs. PV port power is retained even if the
 source-type interpretation is uncertain; it is not forced to zero by a solar
@@ -702,7 +702,7 @@ the user reports actual charging or a load.
 
 The pinned upstream's community PV-source interpretation is `0=OFF`, `1=CAR`,
 `2=SOLAR`, `3=DC_CHARGING`; it explicitly leaves `5` unknown. Its `UNKNOWN=-1`
-is a community parser sentinel, not a newly established device state. OpenDP3 keeps the
+is a community parser sentinel, not a newly established device state. OpenPowerstation keeps the
 numeric value and does not infer a fault or claim a verified meaning for `5`.
 Other run-state numbers are likewise retained without inventing an enum.
 
@@ -764,11 +764,11 @@ The config.json file contains device selection and the account user ID,
 **not passwords or tokens**. Protect that directory with your normal Windows
 account access controls. Do not commit or share it. Data, databases, and
 configuration should remain in a private per-user folder, not a shared or publicly
-writable portable folder. OpenDP3 inherits Windows permissions; it does not
+writable portable folder. OpenPowerstation inherits Windows permissions; it does not
 audit or tighten ACLs automatically. Open recordings only from trusted sources;
 read-only SQLite access is not a security sandbox. Data, databases, and
 credentials are ignored by Git. Device-wide lock files live under the user's
-OpenDP3 data directory so separate database paths cannot claim the same device.
+OpenPowerstation data directory so separate database paths cannot claim the same device.
 
 Raw frames commit before decoding in SQLite WAL mode with FULL synchronization.
 These are decrypted protocol frames; wireless ciphertext and session keys are not retained.
@@ -809,7 +809,7 @@ recording. That separation is the point: capture never depends on publication.
     .\.venv\Scripts\python.exe -m opendp3 --data-dir data bridge --dry-run
     .\.venv\Scripts\python.exe -m opendp3 --data-dir data bridge
 
-Or run **OpenDP3-Bridge.cmd**. Use `--dry-run` first: it prints every entity and the
+Or run **OpenPowerstation-Bridge.cmd**. Use `--dry-run` first: it prints every entity and the
 current state payload without connecting to anything.
 
 Home Assistant receives the decoder's allowlisted numeric fields plus capture-health
@@ -863,7 +863,7 @@ derive the RC4 session key. Status and control then use GATT characteristics
 the device-property query, reassembles the reply, prints it, and disconnects.
 The phone app must release its BLE connection first because the Explorer accepts
 only one BLE client. This is currently a hardware-qualification probe, not yet
-the unattended recorder selected by `Start-OpenDP3.cmd`.
+the unattended recorder selected by `Start-OpenPowerstation.cmd`.
 
 **Observed Explorer 1000 v2 constraint (2026-09-04):** on this installed unit,
 ordinary radio activation is not a practical acquisition window. The station
@@ -874,7 +874,7 @@ For BLE qualification, deliberately reset/forget the station's Wi-Fi configurati
 using the device's documented button procedure, leave Wi-Fi unconfigured during
 the test, and restore it later through the Jackery app if cloud access is wanted.
 That reset can also affect the app binding, so it is an explicit operator action,
-not something OpenDP3 performs or recommends as an unattended recovery step.
+not something OpenPowerstation performs or recommends as an unattended recovery step.
 
 Windows qualification result (2026-09-04): the advertisement, serial, model code,
 session-key material, address type, and connectable flag were decoded repeatedly,
@@ -886,7 +886,7 @@ same Windows path. The next useful experiment is a BlueZ/Home Assistant Bluetoot
 host (the environment used by Private Jack), or a Windows-native connection path
 that bypasses this WinRT address lookup.
 
-OpenDP3 now includes that Windows-native fallback: while the connectable
+OpenPowerstation now includes that Windows-native fallback: while the connectable
 advertisement is live it resolves the station's Windows AEP device identifier
 with `DeviceInformation`, then asks WinRT to open that identifier with
 `BluetoothLEDevice.FromIdAsync` instead of repeating Bleak's failing
@@ -894,7 +894,7 @@ address-only lookup. This needs no ESP32 or additional hardware. Qualification
 on this unit proved that path can open the device, establish an active persistent
 GATT session, negotiate a 517-byte PDU, discover `BDFF`/`BDEE`, subscribe to
 `EE02`, and successfully write without response to `EE01`. Bleak itself loops on
-spurious Windows `services changed` events, so OpenDP3 uses direct WinRT GATT for
+spurious Windows `services changed` events, so OpenPowerstation uses direct WinRT GATT for
 this device. The station nevertheless emitted no notification after either the
 encrypted time-sync or device-property command. Windows reported the device as
 pairable but both ordinary and confirmation-only pairing failed without creating
@@ -931,7 +931,7 @@ screen-timeout preset enum used for control readback.
 For a Home Assistant host (or an ESPHome Bluetooth proxy) within BLE range, the
 community [Private Jack integration](https://github.com/porcupin26/private_jack)
 already implements local polling and local controls without an account or cloud
-call. OpenDP3 exposes the qualified transport's guarded AC/DC output controls,
+call. OpenPowerstation exposes the qualified transport's guarded AC/DC output controls,
 Battery Saving Mode, and screen timeout through the same **Settings → Allow control**
 switch used by the DP3 bridge. Battery Saving Mode is the fixed 15–85% range;
 arbitrary battery-boundary writes remain blocked.
@@ -951,7 +951,7 @@ The GATT write that starts each read shares the read's deadline rather than
 running unbounded, and session cleanup is bounded too, so a stalled BlueZ
 operation ends that session instead of pausing collection until it returns.
 A local recording involves no Jackery account, no cached session, and no outbound
-connection to anything but your own broker. **Start-OpenDP3.cmd** starts it.
+connection to anything but your own broker. **Start-OpenPowerstation.cmd** starts it.
 
 The default poll rate is **3 seconds**. One read on an already-open session takes
 about half a second, so the radio is comfortable at that rate; the constraint is
@@ -1073,7 +1073,7 @@ not rewriting historical evidence.
 
 If the battery was off when the machine started, nothing is recording and nothing
 is on the broker: the desktop app never starts collection on its own, and the
-collector's retry loop only runs once a recording exists. **Start-OpenDP3.cmd**
+collector's retry loop only runs once a recording exists. **Start-OpenPowerstation.cmd**
 covers that case in one step. It starts the headless collector, waits for a real
 authenticated link rather than just reporting that a process launched, then starts
 the bridge.
@@ -1089,14 +1089,14 @@ DP3 is still off, the launcher says so and leaves the collector running: it retr
 forever and attaches on its own once the battery is powered on.
 
 Both processes are detached and log to `data\collector.log` and `data\bridge.log`.
-**Stop-OpenDP3.cmd** ends them gracefully through their stop files — the session is
+**Stop-OpenPowerstation.cmd** ends them gracefully through their stop files — the session is
 closed and saved, Bluetooth is released for the phone, and the bridge marks the
 device offline in Home Assistant rather than leaving stale values behind. Add
 `--gui` to also open the viewer, which shows the headless recording read-only.
 
 ## Controlling the DP3 and Jackery from Home Assistant
 
-OpenDP3 records without writing to either device until you explicitly opt in.
+OpenPowerstation records without writing to either device until you explicitly opt in.
 **Settings → Allow control** publishes the DP3's HV/LV AC output switches and the
 Jackery's AC/DC output switches plus Battery Saving Mode and screen-timeout selectors.
 They appear in Home Assistant after the corresponding bridge reconnects. Jackery
@@ -1122,7 +1122,7 @@ event. Jackery commands are recorded as `control` after status readback, or as
 **Two things to understand before enabling it.** Anything that can publish to
 your broker can request these allowlisted changes; broker access is the entire
 authorization boundary. Home Assistant control state comes from fresh device
-feedback rather than the last command OpenDP3 sent. Missing or stale readback
+feedback rather than the last command OpenPowerstation sent. Missing or stale readback
 makes the corresponding control unavailable instead of guessing that a write
 succeeded.
 

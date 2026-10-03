@@ -20,9 +20,9 @@ def log_provenance():
         repository = provenance.get("repository", "unknown")
         version = provenance.get("version", "unknown")
         digest = str(provenance.get("source_sha256", "unknown"))[:12]
-        print(f"OpenDP3 source: {repository} {version} (sha256 {digest})", flush=True)
+        print(f"OpenPowerstation source: {repository} {version} (sha256 {digest})", flush=True)
     except Exception:
-        print("OpenDP3 source provenance unavailable.", flush=True)
+        print("OpenPowerstation source provenance unavailable.", flush=True)
 
 
 # How long a collector may go without a valid decoded frame before this
@@ -326,7 +326,7 @@ def main():
         jobs["bluetooth-status"] = [sys.executable, "-u", "/opt/opendp3/bluetooth_status.py"]
     except Exception as exc:
         # Configuration can contain credentials. Do not print the original error.
-        print(f"OpenDP3 setup invalid ({type(exc).__name__}); check private import.json and app options.", flush=True)
+        print(f"OpenPowerstation setup invalid ({type(exc).__name__}); check private import.json and app options.", flush=True)
         return 1
     supervise(jobs, stop, data=data, policies=policies, environments=environments)
     return 0

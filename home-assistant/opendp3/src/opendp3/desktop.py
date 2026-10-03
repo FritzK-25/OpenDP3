@@ -49,7 +49,7 @@ def smoke_test(destination: Path) -> int:
         # Load the native crypto extension as well as the Python wrapper.
         AES.new(bytes(16), AES.MODE_CBC, bytes(16)).encrypt(bytes(16))
         # Exercise the ephemeral secp160r1 ECDH that ble.authenticate() performs.
-        # Nothing in OpenDP3 signs with ecdsa; its signing timing leak
+        # Nothing in OpenPowerstation signs with ecdsa; its signing timing leak
         # (GHSA-wj6h-64fc-37mp) needs many signatures from one long-term key.
         ours, theirs = (ecdsa.SigningKey.generate(curve=ecdsa.SECP160r1) for _ in range(2))
         assert (ecdsa.ECDH(ecdsa.SECP160r1, ours, theirs.get_verifying_key()).generate_sharedsecret_bytes()
@@ -117,7 +117,7 @@ def smoke_test(destination: Path) -> int:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description="OpenDP3 Windows desktop")
+    parser = argparse.ArgumentParser(description="OpenPowerstation Windows desktop")
     parser.add_argument("database", nargs="?", type=Path)
     parser.add_argument("--data-dir", type=Path)
     parser.add_argument("--smoke-test", type=Path, help=argparse.SUPPRESS)
@@ -131,8 +131,8 @@ def main(argv=None) -> int:
         # Windowed applications have no stderr. Show a credential-free error.
         import ctypes
         ctypes.windll.user32.MessageBoxW(None,
-            "OpenDP3 could not start (" + type(exc).__name__ + ").\n"
+            "OpenPowerstation could not start (" + type(exc).__name__ + ").\n"
             "Check that the selected data folder is writable and has free space.\n"
             "Your recording files have not been deleted.",
-            "OpenDP3 startup error", 0x10)
+            "OpenPowerstation startup error", 0x10)
         return 1

@@ -23,7 +23,7 @@ try {
     }
     $version = (& $pythonExe packaging/project_version.py).Trim()
     if ($LASTEXITCODE -ne 0) { throw "Could not read the project version." }
-    $outputName = "OpenDP3-$version.exe"
+    $outputName = "OpenPowerstation-$version.exe"
     Write-Output "=== Releasing $outputName ==="
 
     if (-not $SkipTests) {

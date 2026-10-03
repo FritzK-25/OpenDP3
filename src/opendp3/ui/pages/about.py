@@ -8,7 +8,7 @@ from ... import DECODER_VERSION, __version__
 from ...exporting import QUALIFICATION
 from ..widgets import Card, label
 
-QT_NOTICE = ("OpenDP3 uses Qt/PySide6 under its open-source LGPLv3 option. Each "
+QT_NOTICE = ("OpenPowerstation uses Qt/PySide6 under its open-source LGPLv3 option. Each "
              "dependency retains its own copyright and license.")
 
 
@@ -22,7 +22,7 @@ def licence_files():
 
 class AboutPage(QWidget):
     KEY = "about"
-    TITLE = "About OpenDP3"
+    TITLE = "About OpenPowerstation"
     SUBTITLE = "Versions, limits of this evidence, and bundled licences"
 
     def __init__(self, window, parent=None):

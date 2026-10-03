@@ -1,4 +1,4 @@
-"""Recover orphaned battery BlueZ links before OpenDP3 rediscovery."""
+"""Recover orphaned battery BlueZ links before OpenPowerstation rediscovery."""
 import asyncio
 import json
 import os

@@ -8,7 +8,7 @@ This file contains no account configuration, actual telemetry, or captured paylo
 
 - Source schema: `mr521.proto`; package `mr521`.
 - Upstream revision: `7cde8e5922589b5e3c81585890b5188747f5b037`.
-- OpenDP3 decoder: `dp3-mr521/0.1.4+7cde8e592258`.
+- OpenPowerstation decoder: `dp3-mr521/0.1.4+7cde8e592258`.
 - Descriptor SHA-256: `ee0b56296016c4a7ae7e73d50e4e1061fca3ae9133e96e29b5f51e6c3c41d575`.
 - 46 top-level messages, 47 including nested messages; 749 field definitions.
 - 12 enums, 68 named enum values.
@@ -28,7 +28,7 @@ from ha-ef-ble under Apache-2.0; see [notices](../THIRD_PARTY_NOTICES.md).
 - Display helpers are decodable only when nested inside a supported display upload and actually present.
 - Known unmapped display fields are retained in local decoded JSON. Unknown protobuf tags remain only in raw frames.
 - Runtime fields and event-push fields are not automatically obtained by importing their schema classes.
-- Apart from the two opt-in DP3 AC output fields above, DP3 commands, configuration and acknowledgements listed here are not sent by OpenDP3. Jackery controls are governed by its separate allowlist; no additional permissions are enabled by this document.
+- Apart from the two opt-in DP3 AC output fields above, DP3 commands, configuration and acknowledgements listed here are not sent by OpenPowerstation. Jackery controls are governed by its separate allowlist; no additional permissions are enabled by this document.
 - The schema supplies no named `EventPush.LogItem.event_no` dictionary. Do not invent event IDs or map them to Error 036.
 
 ## Normalized field catalog
@@ -147,7 +147,7 @@ Currently unavailable as verified normalized measurements: Pack voltage, Pack cu
 
 Event schema only; no implemented EventPush route, event-number meanings, or acknowledgement sender.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `event_ver` | uint32 | No | Yes | Schema definition; no current standalone decoding |
 | 2 | `event_seq` | uint32 | No | Yes | Schema definition; no current standalone decoding |
@@ -159,7 +159,7 @@ Event schema only; no implemented EventPush route, event-number meanings, or ack
 
 Event schema only; no implemented EventPush route, event-number meanings, or acknowledgement sender.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `unix_time` | uint32 | No | Yes | Schema definition; no current standalone decoding |
 | 2 | `ms` | uint32 | No | Yes | Schema definition; no current standalone decoding |
@@ -172,7 +172,7 @@ Event schema only; no implemented EventPush route, event-number meanings, or ack
 
 Event schema only; no implemented EventPush route, event-number meanings, or acknowledgement sender.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `result` | uint32 | No | Yes | Schema definition; no current standalone decoding |
 | 2 | `event_seq` | uint32 | No | Yes | Schema definition; no current standalone decoding |
@@ -184,7 +184,7 @@ Event schema only; no implemented EventPush route, event-number meanings, or ack
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `req_state` | uint32 | No | Yes | Schema definition; no current standalone decoding |
 
@@ -194,7 +194,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `beep_act_count` | int32 | No | Yes | Schema definition; no current standalone decoding |
 | 2 | `beep_act_ms` | uint32 | No | Yes | Schema definition; no current standalone decoding |
@@ -205,7 +205,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `ac_always_on_flag` | bool | No | Yes | Schema definition; no current standalone decoding |
 | 2 | `ac_always_on_mini_soc` | uint32 | No | Yes | Schema definition; no current standalone decoding |
@@ -216,7 +216,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `bms_power_off` | bool | No | Yes | Schema definition; no current standalone decoding |
 | 2 | `bms_power_state` | uint32 | No | Yes | Schema definition; no current standalone decoding |
@@ -227,7 +227,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `bms_heartbeap_open` | bool | No | Yes | Schema definition; no current standalone decoding |
 | 2 | `bms_health_open` | bool | No | Yes | Schema definition; no current standalone decoding |
@@ -240,7 +240,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `bms_heartbeap_open` | bool | No | Yes | Schema definition; no current standalone decoding |
 | 2 | `bms_health_open` | bool | No | Yes | Schema definition; no current standalone decoding |
@@ -251,7 +251,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Nested helper reachable from display uploads; local JSON only unless explicitly mapped.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `task_index` | uint32 | No | Yes | Nested local JSON when present in a supported upload |
 | 2 | `is_valid` | bool | No | Yes | Nested local JSON when present in a supported upload |
@@ -269,7 +269,7 @@ Nested helper reachable from display uploads; local JSON only unless explicitly 
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `task_index` | uint32 | No | Yes | Schema definition; no current standalone decoding |
 | 2 | `type` | uint32 | No | Yes | Schema definition; no current standalone decoding |
@@ -281,7 +281,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `time_task` | [mr521.SetTimeTaskWrite](#message-mr521-settimetaskwrite) | Yes | No | Schema definition; no current standalone decoding |
 
@@ -291,7 +291,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `energy_backup_en` | bool | No | Yes | Schema definition; no current standalone decoding |
 | 2 | `energy_backup_start_soc` | uint32 | No | Yes | Schema definition; no current standalone decoding |
@@ -302,7 +302,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `ac_hv_always_on` | bool | No | Yes | Schema definition; no current standalone decoding |
 | 2 | `ac_always_on_mini_soc` | uint32 | No | Yes | Schema definition; no current standalone decoding |
@@ -313,7 +313,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `ac_lv_always_on` | bool | No | Yes | Schema definition; no current standalone decoding |
 | 2 | `ac_always_on_mini_soc` | uint32 | No | Yes | Schema definition; no current standalone decoding |
@@ -324,7 +324,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `tou_hours_strategy` | uint32 | Yes | No | Schema definition; no current standalone decoding |
 | 2 | `tou_gird_chg_stop_soc` | uint32 | No | Yes | Schema definition; no current standalone decoding |
@@ -335,7 +335,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `RJ45_commc_timeout` | uint32 | No | Yes | Schema definition; no current standalone decoding |
 | 2 | `RJ45_display_property_upload_period` | int32 | No | Yes | Schema definition; no current standalone decoding |
@@ -347,7 +347,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `storm_pattern_enable` | bool | No | Yes | Schema definition; no current standalone decoding |
 | 2 | `storm_pattern_open_flag` | bool | No | Yes | Schema definition; no current standalone decoding |
@@ -359,7 +359,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `generator_pv_hybrid_mode_open` | bool | No | Yes | Schema definition; no current standalone decoding |
 | 2 | `generator_pv_hybrid_mode_soc_max` | uint32 | No | Yes | Schema definition; no current standalone decoding |
@@ -370,7 +370,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `generator_care_mode_open` | bool | No | Yes | Schema definition; no current standalone decoding |
 | 2 | `generator_care_mode_start_time` | uint32 | No | Yes | Schema definition; no current standalone decoding |
@@ -381,7 +381,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `operate_self_powered_open` | bool | No | Yes | Schema definition; no current standalone decoding |
 | 2 | `operate_scheduled_open` | bool | No | Yes | Schema definition; no current standalone decoding |
@@ -393,7 +393,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `serve_middlemen` | [mr521.SERVE_MIDDLEMEN](#enum-mr521-serve-middlemen) | No | Yes | Schema definition; no current standalone decoding |
 | 2 | `installment_payment_overdue_limit` | [mr521.INSTALLMENT_PAYMENT_OVERDUE_LIMIT](#enum-mr521-installment-payment-overdue-limit) | No | Yes | Schema definition; no current standalone decoding |
@@ -405,7 +405,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `installment_payment_state` | [mr521.INSTALLMENT_PAYMENT_STATE](#enum-mr521-installment-payment-state) | No | Yes | Schema definition; no current standalone decoding |
 | 2 | `installment_payment_start_utc_time` | uint32 | No | Yes | Schema definition; no current standalone decoding |
@@ -417,7 +417,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Nested helper reachable from display uploads; local JSON only unless explicitly mapped.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `resv_info` | uint32 | Yes | No | Nested local JSON when present in a supported upload |
 
@@ -427,7 +427,7 @@ Nested helper reachable from display uploads; local JSON only unless explicitly 
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `serve_middlemen` | [mr521.SERVE_MIDDLEMEN](#enum-mr521-serve-middlemen) | No | Yes | Schema definition; no current standalone decoding |
 
@@ -437,7 +437,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `display_property_full_upload_period` | int32 | No | Yes | Schema definition; no current standalone decoding |
 | 2 | `display_property_incremental_upload_period` | int32 | No | Yes | Schema definition; no current standalone decoding |
@@ -450,7 +450,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Nested helper reachable from display uploads; local JSON only unless explicitly mapped.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `pv_plug_index` | [mr521.PV_PLUG_INDEX](#enum-mr521-pv-plug-index) | No | Yes | Nested local JSON when present in a supported upload |
 | 2 | `pv_chg_vol_spec` | [mr521.PV_CHG_VOL_SPEC](#enum-mr521-pv-chg-vol-spec) | No | Yes | Nested local JSON when present in a supported upload |
@@ -462,7 +462,7 @@ Nested helper reachable from display uploads; local JSON only unless explicitly 
 
 Nested helper reachable from display uploads; local JSON only unless explicitly mapped.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `list_info` | [mr521.PvDcChgSetting](#message-mr521-pvdcchgsetting) | Yes | No | Nested local JSON when present in a supported upload |
 
@@ -472,7 +472,7 @@ Nested helper reachable from display uploads; local JSON only unless explicitly 
 
 Nested helper reachable from display uploads; local JSON only unless explicitly mapped.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `pv_chg_vol_type` | uint32 | No | Yes | Nested local JSON when present in a supported upload |
 | 2 | `pv_chg_amp_max` | uint32 | No | Yes | Nested local JSON when present in a supported upload |
@@ -484,7 +484,7 @@ Nested helper reachable from display uploads; local JSON only unless explicitly 
 
 Nested helper reachable from display uploads; local JSON only unless explicitly mapped.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `pv_chg_max_item` | [mr521.PvChgMaxItem](#message-mr521-pvchgmaxitem) | Yes | No | Nested local JSON when present in a supported upload |
 
@@ -494,7 +494,7 @@ Nested helper reachable from display uploads; local JSON only unless explicitly 
 
 Nested helper reachable from display uploads; local JSON only unless explicitly mapped.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `task_index` | uint32 | No | Yes | Nested local JSON when present in a supported upload |
 | 2 | `is_cfg` | bool | No | Yes | Nested local JSON when present in a supported upload |
@@ -513,7 +513,7 @@ Nested helper reachable from display uploads; local JSON only unless explicitly 
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `time_task` | [mr521.TimeTaskItemV2](#message-mr521-timetaskitemv2) | Yes | No | Schema definition; no current standalone decoding |
 
@@ -523,7 +523,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Nested helper reachable from display uploads; local JSON only unless explicitly mapped.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `statistics_object` | [mr521.STATISTICS_OBJECT](#enum-mr521-statistics-object) | No | Yes | Nested local JSON when present in a supported upload |
 | 2 | `statistics_content` | uint32 | No | Yes | Nested local JSON when present in a supported upload |
@@ -534,7 +534,7 @@ Nested helper reachable from display uploads; local JSON only unless explicitly 
 
 Nested helper reachable from display uploads; local JSON only unless explicitly mapped.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `list_info` | [mr521.StatisticsRecordItem](#message-mr521-statisticsrecorditem) | Yes | No | Nested local JSON when present in a supported upload |
 
@@ -544,7 +544,7 @@ Nested helper reachable from display uploads; local JSON only unless explicitly 
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `list_info` | [mr521.StatisticsRecordItem](#message-mr521-statisticsrecorditem) | Yes | No | Schema definition; no current standalone decoding |
 
@@ -554,7 +554,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Nested helper reachable from display uploads; local JSON only unless explicitly mapped.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `errcode` | uint32 | No | Yes | Nested local JSON when present in a supported upload |
 | 2 | `errcode_timestamp` | uint32 | No | Yes | Nested local JSON when present in a supported upload |
@@ -565,7 +565,7 @@ Nested helper reachable from display uploads; local JSON only unless explicitly 
 
 Nested helper reachable from display uploads; local JSON only unless explicitly mapped.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `list_info` | [mr521.ErrcodeRecordItem](#message-mr521-errcoderecorditem) | Yes | No | Nested local JSON when present in a supported upload |
 
@@ -575,7 +575,7 @@ Nested helper reachable from display uploads; local JSON only unless explicitly 
 
 Nested helper reachable from display uploads; local JSON only unless explicitly mapped.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `connect_flag` | bool | No | Yes | Nested local JSON when present in a supported upload |
 | 2 | `dev_type` | uint32 | No | Yes | Nested local JSON when present in a supported upload |
@@ -590,7 +590,7 @@ Nested helper reachable from display uploads; local JSON only unless explicitly 
 
 Nested helper reachable from display uploads; local JSON only unless explicitly mapped.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `type` | [mr521.TIME_TASK_DETAIL_TYPE](#enum-mr521-time-task-detail-type) | No | Yes | Nested local JSON when present in a supported upload |
 | 2 | `val` | float | No | Yes | Nested local JSON when present in a supported upload |
@@ -601,7 +601,7 @@ Nested helper reachable from display uploads; local JSON only unless explicitly 
 
 Outbound control route, opt-in: only `cfg_hv_ac_out_open` and `cfg_lv_ac_out_open` are ever sent, and only while control is enabled in Settings. Every other field on this message is refused by the gate.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 3 | `cfg_power_off` | bool | No | Yes | Schema definition; no current standalone decoding |
 | 4 | `cfg_power_on` | bool | No | Yes | Schema definition; no current standalone decoding |
@@ -703,7 +703,7 @@ Outbound control route, opt-in: only `cfg_hv_ac_out_open` and `cfg_lv_ac_out_ope
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `action_id` | uint32 | No | Yes | Schema definition; no current standalone decoding |
 | 2 | `config_ok` | bool | No | Yes | Schema definition; no current standalone decoding |
@@ -807,7 +807,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `action_id` | uint32 | Yes | No | Schema definition; no current standalone decoding |
 
@@ -817,7 +817,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 6 | `cfg_utc_time` | uint32 | No | Yes | Schema definition; no current standalone decoding |
 | 7 | `cfg_utc_timezone` | int32 | No | Yes | Schema definition; no current standalone decoding |
@@ -836,7 +836,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Supported display route; selected fields normalized, other present known fields kept locally.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `errcode` | uint32 | No | Yes | Normalized numeric field |
 | 2 | `sys_status` | uint32 | No | Yes | Local decoded JSON when present; not normalized/exported |
@@ -1141,7 +1141,7 @@ Supported display route; selected fields normalized, other present known fields 
 
 Runtime schema only; no implemented runtime-property route.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 293 | `display_property_full_upload_period` | int32 | No | Yes | Schema definition; no current standalone decoding |
 | 294 | `display_property_incremental_upload_period` | int32 | No | Yes | Schema definition; no current standalone decoding |
@@ -1294,7 +1294,7 @@ Runtime schema only; no implemented runtime-property route.
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `dev_utc_time` | uint32 | No | Yes | Schema definition; no current standalone decoding |
 | 2 | `dev_utc_timezone` | float | No | Yes | Schema definition; no current standalone decoding |
@@ -1307,7 +1307,7 @@ Schema only outside supported display nesting; no standalone route/request/ackno
 
 Schema only outside supported display nesting; no standalone route/request/acknowledgement implemented.
 
-| Tag | Field | Protobuf type | Repeated | Presence | OpenDP3 use |
+| Tag | Field | Protobuf type | Repeated | Presence | OpenPowerstation use |
 |---:|---|---|:---:|:---:|---|
 | 1 | `request_id` | uint32 | No | Yes | Schema definition; no current standalone decoding |
 | 2 | `require_ok` | uint32 | No | Yes | Schema definition; no current standalone decoding |

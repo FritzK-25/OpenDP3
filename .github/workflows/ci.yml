@@ -108,7 +108,7 @@ jobs:
           assert provenance['version'] == opendp3.__version__, provenance
           import os, platform
           assert platform.machine() == os.environ['EXPECTED_MACHINE'], platform.machine()
-          print('OpenDP3', opendp3.__version__, platform.machine(), 'image OK')
+          print('OpenPowerstation', opendp3.__version__, platform.machine(), 'image OK')
           "
 
   # One stable check name over the per-architecture builds, so branch

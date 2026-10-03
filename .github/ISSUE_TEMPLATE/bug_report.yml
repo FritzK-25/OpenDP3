@@ -1,5 +1,5 @@
 name: Bug report
-description: Something in OpenDP3 does not work as documented.
+description: Something in OpenPowerstation does not work as documented.
 labels: [bug]
 body:
   - type: markdown
@@ -11,7 +11,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: OpenDP3 version
+      label: OpenPowerstation version
       placeholder: "0.2.0"
     validations:
       required: true

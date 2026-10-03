@@ -81,7 +81,7 @@ def discovery_payloads(serial, firmware="", control=False):
               "manufacturer": "Jackery", "model": "Explorer 1000 v2"}
     if firmware:
         device["sw_version"] = firmware
-    origin = {"name": "OpenDP3", "sw_version": __version__}
+    origin = {"name": "OpenPowerstation", "sw_version": __version__}
     payloads = {}
     for entity in jackery_entities():
         is_control = entity.key in JACKERY_CONTROLS

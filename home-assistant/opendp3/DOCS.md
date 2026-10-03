@@ -1,11 +1,11 @@
-# OpenDP3 Battery Telemetry
+# OpenPowerstation Battery Telemetry
 
-Runs the OpenDP3 EcoFlow DELTA Pro 3 and Jackery Explorer 1000 v2 Bluetooth
+Runs the OpenPowerstation EcoFlow DELTA Pro 3 and Jackery Explorer 1000 v2 Bluetooth
 collectors and their MQTT publishers on Home Assistant OS. The app uses the
 host's BlueZ through D-Bus, keeps SQLite recordings in its persistent `/data`,
 and restarts exited workers. Desktop GUI dependencies are not used.
 
-OpenDP3 is an independent community project, not affiliated with EcoFlow or
+OpenPowerstation is an independent community project, not affiliated with EcoFlow or
 Jackery, and it is not a safety monitor or a replacement for a battery's own
 protections.
 
@@ -19,8 +19,8 @@ qualification is incomplete.
 ## Install
 
 1. In Home Assistant open **Settings → Apps → App store → ⋮ → Repositories**
-   and add `https://github.com/FritzK-25/OpenDP3`.
-2. Install **OpenDP3 Battery Telemetry**.
+   and add `https://github.com/FritzK-25/OpenPowerstation`.
+2. Install **OpenPowerstation Battery Telemetry**.
 3. Create the configuration file described below, then start the app.
 
 You need an MQTT broker, for example the Mosquitto app, and Bluetooth on the
@@ -63,11 +63,11 @@ keep it private and never commit it. Fields:
 | `jackery_adapter` | `hci0` | Bluetooth adapter for the Jackery |
 | `allow_control` | `false` | Expose the guarded control entities |
 
-**Control is off by default.** With it on, OpenDP3 accepts only its allowlisted
+**Control is off by default.** With it on, OpenPowerstation accepts only its allowlisted
 output and battery-saving commands, only while the collector holds a live
 Bluetooth session, and it rejects retained MQTT commands. Everything else is
 refused before it reaches the radio. See
-[Security and evidence trust](https://github.com/FritzK-25/OpenDP3/blob/main/docs/SECURITY.md).
+[Security and evidence trust](https://github.com/FritzK-25/OpenPowerstation/blob/main/docs/SECURITY.md).
 
 ## Connection recovery
 

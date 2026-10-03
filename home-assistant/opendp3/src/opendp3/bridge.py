@@ -270,7 +270,7 @@ def discovery_payloads(dev_id: str, *, firmware: str = "", control: bool = False
               "manufacturer": "EcoFlow", "model": "DELTA Pro 3"}
     if firmware:
         device["sw_version"] = firmware
-    origin = {"name": "OpenDP3", "sw_version": __version__}
+    origin = {"name": "OpenPowerstation", "sw_version": __version__}
     payloads = {}
     for entity in entities():
         config = {
