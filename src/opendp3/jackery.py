@@ -6,7 +6,6 @@ but discovery is the safe first step: it does not connect or write anything.
 """
 from dataclasses import dataclass, replace
 import asyncio
-import contextlib
 import base64
 from datetime import datetime
 import json

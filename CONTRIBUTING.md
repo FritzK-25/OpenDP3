@@ -37,8 +37,12 @@ To run the suite before every commit, install the pre-commit hook once:
 python scripts/install_hooks.py
 ```
 
+CI also lints with [Ruff](https://docs.astral.sh/ruff/) (`pip install ruff`,
+then `ruff check .`); the rules are in `pyproject.toml`.
+
 CI runs the same suite on Linux and Windows, builds the Windows executable
-with the pinned release environment, and builds the Home Assistant app image.
+with the pinned release environment, and builds the Home Assistant app image
+for amd64 and aarch64.
 
 The application version lives in one place, `src/opendp3/__init__.py`, and is
 changed with `scripts/bump_version.py`.

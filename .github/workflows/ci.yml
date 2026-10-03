@@ -44,6 +44,21 @@ jobs:
       - name: Home Assistant app copy is current
         run: python scripts/sync_ha_app.py --check
 
+  # Pyflakes-level checks (unused imports and variables, undefined names). The
+  # rule set and exclusions live in pyproject.toml under [tool.ruff].
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Ruff
+        run: |
+          python -m pip install ruff==0.16.10
+          ruff check --output-format=github .
+
   # The release build, with the release's pinned environment. Runs here so a
   # broken build or a lockfile/pyproject mismatch shows up before tagging.
   # On pull requests it skips its own test pass: the test job above already

@@ -15,7 +15,6 @@ from opendp3.jackery import (
     jackery_control_command,
     jackery_control_value,
     _winrt_address_type,
-    _winrt_device_id,
     _winrt_connectable,
     parse_advertisement,
 )

@@ -1,4 +1,3 @@
-import asyncio
 import hashlib
 import struct
 from types import SimpleNamespace
