@@ -70,7 +70,7 @@ def main(argv=None) -> int:
         return 0
     SOURCE.write_text(PATTERN.sub(f'__version__ = "{new_text}"', text, count=1), encoding="utf-8")
     print(f"{old_text} -> {new_text}")
-    print(f"Next: .\\packaging\\release.ps1   (builds OpenDP3-{new_text}.exe)")
+    print(f"Next: .\\packaging\\release.ps1   (builds OpenPowerstation-{new_text}.exe)")
     return 0
 
 

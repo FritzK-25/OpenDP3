@@ -67,7 +67,7 @@ class Jobs:
         return task
 
     def show_error(self, text):
-        QMessageBox.warning(self,"OpenDP3",text)
+        QMessageBox.warning(self,"OpenPowerstation",text)
 
 
 class SetupDialog(QDialog, Jobs):
@@ -77,7 +77,7 @@ class SetupDialog(QDialog, Jobs):
         super().__init__(parent)
         self.init_jobs()
         self.root = Path(root)
-        self.setWindowTitle("OpenDP3 · Local Bluetooth setup")
+        self.setWindowTitle("OpenPowerstation · Local Bluetooth setup")
         self.resize(590, 620)
         if parent is not None:
             self.setStyleSheet(parent.styleSheet())
@@ -150,13 +150,13 @@ class Window(QMainWindow, Jobs):
         self.theme = self.prefs["theme"]
         self.bridge = Bridge(self)
         self.bridge.status.connect(self.on_service)
-        self.setWindowTitle(f"OpenDP3 {__version__} · Local flight recorder")
+        self.setWindowTitle(f"OpenPowerstation {__version__} · Local flight recorder")
         self.resize(1490,980)
         self.setMinimumSize(1080,820)
         self.build()
         self.tray = QSystemTrayIcon(self.windowIcon(),self)
         menu = QMenu(self)
-        menu.addAction("Show OpenDP3",self.showNormal)
+        menu.addAction("Show OpenPowerstation",self.showNormal)
         menu.addAction("Stop and exit",self.stop_and_exit)
         self.tray.setContextMenu(menu)
         self.tray.activated.connect(lambda reason:self.showNormal() if reason == QSystemTrayIcon.ActivationReason.DoubleClick else None)
@@ -653,7 +653,7 @@ class Window(QMainWindow, Jobs):
         parent = QFileDialog.getExistingDirectory(self,"Choose folder for a new evidence bundle",str(default))
         if not parent: return
         from .exporting import export_evidence
-        destination = Path(parent)/("OpenDP3-"+datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
+        destination = Path(parent)/("OpenPowerstation-"+datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
         path,sid,incident = self.database,self.sid,self.selected_incident()
         self.banner.setText("Exporting sanitized numeric data and offline charts…")
         def done(result):
@@ -685,7 +685,7 @@ class Window(QMainWindow, Jobs):
         if active and not self.force_exit:
             if QSystemTrayIcon.isSystemTrayAvailable():
                 self.tray.show(); self.hide()
-                self.tray.showMessage("OpenDP3 is still recording","Double-click the tray icon to return. Use Stop and exit to finish.")
+                self.tray.showMessage("OpenPowerstation is still recording","Double-click the tray icon to return. Use Stop and exit to finish.")
             else:
                 self.banner.setText("System tray unavailable. Use Stop and exit to close safely.")
             event.ignore(); return
@@ -721,7 +721,7 @@ class Window(QMainWindow, Jobs):
 
 def launch(root, database=None):
     app = QApplication.instance() or QApplication([])
-    app.setApplicationName("OpenDP3")
+    app.setApplicationName("OpenPowerstation")
     app.setQuitOnLastWindowClosed(True)
     window = Window(root,database)
     window.show()

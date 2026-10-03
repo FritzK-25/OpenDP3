@@ -14,7 +14,7 @@ a battery error, exceed operating limits, or change safety protections.
 - Confirm authenticated local operation and inspect actual fields/cadence.
   Missing temperature/error data is a coverage limitation, not a zero or success.
 - Compare a few steady values with the device display. To use phone BLE,
-  release OpenDP3 first; note the resulting capture gap.
+  release OpenPowerstation first; note the resulting capture gap.
 - Confirm Release remains disconnected until Resume.
 
 ## Offline operation and ordinary use

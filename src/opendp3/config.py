@@ -169,6 +169,6 @@ async def resolve_user_id(identifier: str, password: str, region: str) -> str:
         raise ValueError("Unable to obtain a user ID. Check connectivity or enter it manually.") from None
     finally:
         # Drop this request body's references promptly. Python cannot reliably zero
-        # immutable strings. OpenDP3 does not intentionally save EcoFlow credentials
+        # immutable strings. OpenPowerstation does not intentionally save EcoFlow credentials
         # in its configuration, recordings, or exports.
         body.clear()

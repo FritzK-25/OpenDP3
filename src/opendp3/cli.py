@@ -22,7 +22,7 @@ from .config import Config, data_dir, load_config, resolve_user_id, save_config
 UNMAPPED_READ_LIMIT = 5
 
 def parser():
-    p = argparse.ArgumentParser(description="OpenDP3 — local DELTA Pro 3 and Jackery telemetry and control")
+    p = argparse.ArgumentParser(description="OpenPowerstation — local DELTA Pro 3 and Jackery telemetry and control")
     p.add_argument("--data-dir",type=Path,default=data_dir(),help="Local data/config directory")
     subs = p.add_subparsers(dest="command",required=True)
     scan = subs.add_parser("scan",help="Detect adapter and discover DP3 advertisements (no connection)")
@@ -38,7 +38,7 @@ def parser():
     jackery_ble_record.add_argument("--hours", type=float)
     jackery_ble_record.add_argument("--stop-file", type=Path,
         help="Gracefully stop when this local file is created (default: <data-dir>/jackery.stop, "
-             "the name Stop-OpenDP3.cmd signals)")
+             "the name Stop-OpenPowerstation.cmd signals)")
     jackery_compact = subs.add_parser("jackery-compact",
         help="Thin old ordinary Jackery history to one sample a minute (reports only unless --apply)")
     jackery_compact.add_argument("--database", type=Path)
@@ -53,7 +53,7 @@ def parser():
     jackery_bridge.add_argument("--once", action="store_true")
     jackery_bridge.add_argument("--stop-file", type=Path,
         help="Gracefully stop when this local file is created (default: <data-dir>/jackery-bridge.stop, "
-             "so Stop-OpenDP3.cmd can always reach a manually-started run)")
+             "so Stop-OpenPowerstation.cmd can always reach a manually-started run)")
     setup = subs.add_parser("setup",help="Select a device and enter user ID or log in once")
     setup.add_argument("--login",action="store_true",help="Explicitly permit one setup-only EcoFlow login")
     record = subs.add_parser("record",help="Record the configured DP3 over BLE")
@@ -61,7 +61,7 @@ def parser():
     record.add_argument("--hours",type=float,help="Stop after this many hours; qualification is manual")
     record.add_argument("--stop-file", type=Path,
         help="Gracefully stop when this local file is created (default: <data-dir>/collector.stop, "
-             "so Stop-OpenDP3.cmd can always reach a manually-started run)")
+             "so Stop-OpenPowerstation.cmd can always reach a manually-started run)")
     replay = subs.add_parser("replay",help="Inspect/redecode a saved database without Bluetooth")
     replay.add_argument("database",type=Path)
     replay.add_argument("--session",help="Restrict inspection and verification to this recorded session")
@@ -307,7 +307,7 @@ def do_jackery_compact(root, database, grace_hours=48, bucket_seconds=60, apply_
     """Thin ordinary Jackery history; flagged and recent windows are untouched.
 
     Reports without deleting unless asked to apply, because this is the one
-    command in OpenDP3 whose whole job is destroying recorded frames.
+    command in OpenPowerstation whose whole job is destroying recorded frames.
     """
     from .jackery_fields import PEAK_KEYS
     from .storage import Store
@@ -378,7 +378,7 @@ def desktop_component(module, attribute):
 
     Qt and pyqtgraph live in the optional `gui` extra so a collector or bridge
     installs without them. Reaching a desktop command from a headless install is
-    a configuration mistake, not a crash, so it gets the same "OpenDP3: ..."
+    a configuration mistake, not a crash, so it gets the same "OpenPowerstation: ..."
     treatment as any other operator error.
 
     Evidence export is not routed through here: `exporting` imports cleanly
@@ -397,10 +397,10 @@ def desktop_component(module, attribute):
 def main(argv=None):
     args = parser().parse_args(argv)
     root = args.data_dir
-    # A run started by hand (not through start_all.py / Start-OpenDP3.cmd) that
-    # omits --stop-file has no way to be told to stop -- Stop-OpenDP3.cmd only
+    # A run started by hand (not through start_all.py / Start-OpenPowerstation.cmd) that
+    # omits --stop-file has no way to be told to stop -- Stop-OpenPowerstation.cmd only
     # ever signals these fixed names, the same ones start_all.py passes
-    # explicitly. Defaulting to them here means Stop-OpenDP3.cmd reaches a
+    # explicitly. Defaulting to them here means Stop-OpenPowerstation.cmd reaches a
     # manual invocation too, instead of it lingering forever holding the
     # writer lock. See jackery.sqlite.writer.lock incident, 2026-09-04.
     default_stop_files = {"record": "collector.stop", "jackery-record": "jackery.stop",
@@ -516,7 +516,7 @@ def main(argv=None):
             launch = desktop_component(".gui","launch")
             launch(root,args.database)
     except (ValueError,FileNotFoundError,FileExistsError,PermissionError) as exc:
-        print(f"OpenDP3: {exc}",file=sys.stderr)
+        print(f"OpenPowerstation: {exc}",file=sys.stderr)
         return 1
     return 0
 

@@ -1,4 +1,4 @@
-"""OpenDP3: local battery telemetry with an explicit guarded-control boundary."""
+"""OpenPowerstation: local battery telemetry with an explicit guarded-control boundary."""
 # THE single source of the application version. pyproject.toml reads it through
 # setuptools' dynamic version, packaging/prepare.py generates the Windows
 # version resource from it, and scripts/bump_version.py is the only thing that

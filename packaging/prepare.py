@@ -55,17 +55,17 @@ numeric = "(" + ",".join(str(n) for n in file_version_tuple(version)) + ")"
                    flags=0x0, OS=0x40004, fileType=0x1, subtype=0x0, date=(0,0)),
   kids=[
     StringFileInfo([StringTable('040904B0', [
-      StringStruct('FileDescription', 'OpenDP3 local flight recorder'),
+      StringStruct('FileDescription', 'OpenPowerstation local flight recorder'),
       StringStruct('FileVersion', '{version}'),
-      StringStruct('InternalName', 'OpenDP3'),
-      StringStruct('OriginalFilename', 'OpenDP3.exe'),
-      StringStruct('ProductName', 'OpenDP3'),
+      StringStruct('InternalName', 'OpenPowerstation'),
+      StringStruct('OriginalFilename', 'OpenPowerstation.exe'),
+      StringStruct('ProductName', 'OpenPowerstation'),
       StringStruct('ProductVersion', '{version}'),
     ])]),
     VarFileInfo([VarStruct('Translation', [1033, 1200])]),
   ]
 )
 """, encoding="ascii")
-canvas.save(root / "packaging/OpenDP3.ico", sizes=[(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)])
+canvas.save(root / "packaging/OpenPowerstation.ico", sizes=[(16,16),(24,24),(32,32),(48,48),(64,64),(128,128),(256,256)])
 print(f"Prepared icon, version resource {version}, and dependency notices; "
       "no user configuration or recordings included.")

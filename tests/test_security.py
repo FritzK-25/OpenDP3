@@ -130,7 +130,7 @@ def test_cli_bad_config_has_no_traceback_or_input_echo(tmp_path, capsys):
     (tmp_path / "config.json").write_text(json.dumps(values), encoding="utf-8")
     assert main(["--data-dir", str(tmp_path), "record"]) == 1
     output = capsys.readouterr().err
-    assert "OpenDP3:" in output and "Traceback" not in output and "PRIVATE_VALUE" not in output
+    assert "OpenPowerstation:" in output and "Traceback" not in output and "PRIVATE_VALUE" not in output
 
 
 @pytest.mark.parametrize("body", ["invalid_json", [], None, {"code": "0", "data": []},

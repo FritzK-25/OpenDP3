@@ -132,7 +132,7 @@ def export_evidence(database: Path, destination: Path, *, sid=None, incident_id=
             if event["kind"] in {"suspect_telemetry","device_error","manual"}:
                 axis.axvline(event["t"],color="#cb6122",lw=.6,alpha=.45)
     axes[-1].set_xlabel("Elapsed seconds from recording start (host monotonic receipt time)")
-    figure.suptitle("SYNTHETIC DEMONSTRATION — NOT DEVICE EVIDENCE" if synthetic else "OpenDP3 telemetry evidence")
+    figure.suptitle("SYNTHETIC DEMONSTRATION — NOT DEVICE EVIDENCE" if synthetic else "OpenPowerstation telemetry evidence")
     figure.savefig(destination/"charts.png",dpi=150)
     rows_html = "".join(f"<tr><td>{html.escape(f.label)}</td><td>{'Observed' if f.key in points else 'Not observed'}</td></tr>"
                         for f in field_map.values())
@@ -141,11 +141,11 @@ def export_evidence(database: Path, destination: Path, *, sid=None, incident_id=
                     "Pack and PV voltage/current are not mapped: configured charging limits are not measurements. "
                     "Extra-battery temperatures use an unverified community mapping.")
     report = f"""<!doctype html><html lang="en"><meta charset="utf-8">
-<title>OpenDP3 incident report</title><style>
+<title>OpenPowerstation incident report</title><style>
 body{{font:16px system-ui;max-width:1100px;margin:40px auto;padding:0 24px;color:#183142}}
 h1{{margin-bottom:8px}} .notice{{background:#fff1da;padding:16px;border-left:4px solid #c47712}}
 img{{width:100%}}td{{padding:6px 20px;border-bottom:1px solid #ddd}}small{{color:#526676}}
-</style><h1>OpenDP3 · {'Synthetic demonstration' if synthetic else 'Telemetry report'}</h1>
+</style><h1>OpenPowerstation · {'Synthetic demonstration' if synthetic else 'Telemetry report'}</h1>
 <p class="notice">{'SYNTHETIC DATA — not a recording from your battery. ' if synthetic else ''}{html.escape(QUALIFICATION)}</p>
 <p>Requested window: {start:.3f}–{end:.3f} elapsed seconds.
 Pre/post coverage complete: {complete}. Communication or capture gaps: {gaps}.</p>

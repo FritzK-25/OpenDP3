@@ -1,5 +1,5 @@
 name: Hardware test report
-description: Report how OpenDP3 behaved on your power station, working or not.
+description: Report how OpenPowerstation behaved on your power station, working or not.
 labels: [hardware-report]
 body:
   - type: markdown
@@ -25,7 +25,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: OpenDP3 version
+      label: OpenPowerstation version
       placeholder: "0.2.0"
     validations:
       required: true

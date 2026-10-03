@@ -27,7 +27,7 @@ SESSION_LEASE_CHECK = 5.0
 class Service(threading.Thread):
     def __init__(self, config: Config, database: Path, *, notify=lambda _: None, lock_dir=None,
                  config_path=None):
-        super().__init__(name="OpenDP3 recorder", daemon=False)
+        super().__init__(name="OpenPowerstation recorder", daemon=False)
         self.config, self.database, self.notify = config, Path(database), notify
         self.config_path = config_path
         self.lock_dir = Path(lock_dir) if lock_dir else data_dir() / "locks"
@@ -97,7 +97,7 @@ class Service(threading.Thread):
             with portalocker.Lock(self.lock_dir / (key + ".lock"), timeout=0):
                 asyncio.run(self.collect())
         except portalocker.exceptions.LockException:
-            self.error = "Another OpenDP3 collector already owns this device."
+            self.error = "Another OpenPowerstation collector already owns this device."
             self.set_state("error", self.error)
         except Exception as exc:
             # Never propagate arbitrary BLE/account payloads into logs or UI.
