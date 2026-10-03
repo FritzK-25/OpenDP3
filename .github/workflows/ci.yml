@@ -8,11 +8,12 @@ on:
 permissions:
   contents: read
 
-# A newer push to the same pull request supersedes the old run. Runs on main
-# always finish, so every commit there keeps a result.
+# A newer push to the same pull request supersedes the old run. Every other
+# run gets a group of its own, because a shared group would also drop queued
+# runs: each commit on main keeps a result.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
 
 jobs:
   test:
