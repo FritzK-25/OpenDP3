@@ -1,0 +1,65 @@
+name: Hardware test report
+description: Report how OpenDP3 behaved on your power station, working or not.
+labels: [hardware-report]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. Reports from real hardware are the most useful contribution.
+        Only describe what you observed on your own device.
+
+        **Never post private identifiers.** No serials, Bluetooth addresses,
+        account IDs, credentials or raw recordings.
+  - type: input
+    id: model
+    attributes:
+      label: Device model
+      placeholder: "EcoFlow DELTA Pro 3"
+    validations:
+      required: true
+  - type: input
+    id: firmware
+    attributes:
+      label: Firmware version labels
+      description: As shown in the vendor's app. Do not update firmware for this report.
+  - type: input
+    id: version
+    attributes:
+      label: OpenDP3 version
+      placeholder: "0.2.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: host
+    attributes:
+      label: Host
+      options:
+        - Windows executable
+        - Home Assistant OS app
+        - Linux from source
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: results
+    attributes:
+      label: What worked
+      options:
+        - label: The device was discovered
+        - label: Authentication succeeded
+        - label: Telemetry recorded (charge, power, temperatures)
+        - label: Recording survived for several hours
+        - label: Reconnected after the device or Bluetooth dropped
+        - label: Home Assistant entities appeared over MQTT
+  - type: input
+    id: duration
+    attributes:
+      label: How long you recorded
+      placeholder: "3 h 20 min"
+  - type: textarea
+    id: notes
+    attributes:
+      label: What you observed
+      description: Gaps, fields that looked wrong, errors, anything surprising.
+    validations:
+      required: true

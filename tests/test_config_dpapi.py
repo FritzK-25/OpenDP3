@@ -5,11 +5,15 @@ config.py's load_config/save_config. Runs against the real Windows DPAPI
 (no mocking), against the real Windows API rather than a stand-in.
 """
 import json
+import os
 
 import pytest
 
 from opendp3 import dpapi
 from opendp3.config import Config, load_config, save_config
+
+
+pytestmark = pytest.mark.skipif(os.name != "nt", reason="real Windows DPAPI")
 
 
 def sample_config(**overrides):
