@@ -8,6 +8,13 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same pull request supersedes the old run. Every other
+# run gets a group of its own, because a shared group would also drop queued
+# runs: each commit on main keeps a result.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   test:
     strategy:
@@ -17,8 +24,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Qt system libraries
@@ -29,8 +36,33 @@ jobs:
       - name: Test
         env:
           QT_QPA_PLATFORM: offscreen
-        run: python -m pytest -v --durations=25 -o faulthandler_timeout=240
+        run: python -m pytest -q --durations=25
       - name: Protocol reference is current
         run: python scripts/generate_protocol_reference.py --check
       - name: Home Assistant app copy is current
         run: python scripts/sync_ha_app.py --check
+
+  # The release build, with the release's pinned environment. Runs here so a
+  # broken build or a lockfile/pyproject mismatch shows up before tagging.
+  windows-build:
+    uses: ./.github/workflows/windows-build.yml
+
+  home-assistant-app:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build the app image
+        run: |
+          version=$(python3 packaging/project_version.py)
+          docker build home-assistant/opendp3 --tag opendp3-app:ci \
+            --build-arg BUILD_VERSION="$version" --build-arg BUILD_ARCH=amd64
+      - name: Headless entry points import inside the image
+        run: |
+          docker run --rm opendp3-app:ci python -c "
+          import json, opendp3, opendp3.cli, opendp3.bridge, opendp3.jackery_bridge, opendp3.recorder
+          import run, linux_worker, bluetooth_status
+          provenance = json.load(open('/opt/opendp3/SOURCE-PROVENANCE.json'))
+          assert provenance['version'] == opendp3.__version__, provenance
+          print('OpenDP3', opendp3.__version__, 'image OK')
+          "

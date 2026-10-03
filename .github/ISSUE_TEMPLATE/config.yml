@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security problem privately
+    url: https://github.com/FritzK-25/OpenDP3/security/advisories/new
+    about: Do not open a public issue for vulnerabilities. See SECURITY.md.

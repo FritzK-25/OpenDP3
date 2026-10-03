@@ -5,6 +5,7 @@ rest drive a real Window over the synthetic demonstration database, because the
 widgets under test only fill in once a snapshot has been rendered into them.
 """
 import json
+import os
 import re
 from pathlib import Path
 
@@ -498,6 +499,7 @@ def test_minimum_size_layout_survives(demo, qtbot):
         assert panel.width() > 0 and panel.plot.height() > 0
 
 
+@pytest.mark.skipif(os.name != "nt", reason="stores the broker password with real Windows DPAPI")
 def test_bridge_and_bluetooth_cards_never_overwrite_each_other(qtbot, tmp_path):
     """Both cards write one config.json; neither may drop the other's fields."""
     from PySide6.QtWidgets import QLineEdit

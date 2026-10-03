@@ -1,0 +1,44 @@
+name: Windows build
+
+# The one definition of how the Windows executable is built. CI calls it on
+# every push and pull request, and Release calls it on a tag, so a green CI
+# run means the release build will succeed with the same pinned environment.
+#
+# It installs from requirements.lock (exact pins), not from the version ranges
+# in pyproject.toml that the test matrix uses, then runs packaging/release.ps1:
+# tests, PyInstaller build, frozen verification.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install build environment
+        shell: pwsh
+        run: |
+          python -m venv .venv
+          .\.venv\Scripts\python.exe -m pip install -r requirements.lock
+          .\.venv\Scripts\python.exe -m pip install --no-deps -e .
+          .\.venv\Scripts\python.exe -m pip install -r packaging/requirements-build.txt
+      - name: Test, build and verify
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: .\packaging\release.ps1
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-executable
+          path: |
+            OpenDP3-*.exe
+            OpenDP3-*.exe.sha256
+          if-no-files-found: error
