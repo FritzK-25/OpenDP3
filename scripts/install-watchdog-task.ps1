@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Install or update the single OpenDP3 watchdog Scheduled Task.
+    Install or update the single OpenPowerstation watchdog Scheduled Task.
 
 .DESCRIPTION
     The task owns the watchdog only. The watchdog owns the detached recorder and
@@ -51,7 +51,7 @@ if ($existing) {
     $principal = New-ScheduledTaskPrincipal -UserId $user -LogonType Interactive -RunLevel Limited
     Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $triggers `
         -Settings $settings -Principal $principal `
-        -Description 'Single owner for OpenDP3 telemetry watchdog, recorder, and MQTT bridges.'
+        -Description 'Single owner for OpenPowerstation telemetry watchdog, recorder, and MQTT bridges.'
 }
 
 Start-ScheduledTask -TaskName $TaskName

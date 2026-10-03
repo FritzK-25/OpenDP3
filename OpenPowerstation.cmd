@@ -2,7 +2,7 @@
 setlocal
 cd /d "%~dp0"
 if not exist ".venv\Scripts\pythonw.exe" (
-  echo OpenDP3 dependencies are not installed. Follow docs/REFERENCE.md first.
+  echo OpenPowerstation dependencies are not installed. Follow docs/REFERENCE.md first.
   pause
   exit /b 1
 )

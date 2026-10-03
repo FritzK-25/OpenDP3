@@ -1,7 +1,7 @@
 """Vector icons drawn with QPainter.
 
 Deliberately code-only: no SVG or PNG assets means no new ``datas`` entry in
-``packaging/OpenDP3.spec`` and nothing that can go missing from a frozen build.
+``packaging/OpenPowerstation.spec`` and nothing that can go missing from a frozen build.
 Every function takes a colour from the active theme, so icons re-tint when the
 user switches themes rather than staying stuck in the palette they were born in.
 """

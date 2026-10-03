@@ -154,7 +154,7 @@ class Sidebar(QFrame):
         brand.addWidget(self.mark)
         names = QVBoxLayout()
         names.setSpacing(0)
-        names.addWidget(label("OpenDP3", "brand"))
+        names.addWidget(label("OpenPowerstation", "brand"))
         names.addWidget(label("Local flight recorder", "brandSub"))
         brand.addLayout(names)
         brand.addStretch()

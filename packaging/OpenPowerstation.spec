@@ -56,8 +56,8 @@ if unexpected:
 pyz = PYZ(a.pure)
 exe = EXE(
     pyz, a.scripts, a.binaries, a.datas, [],
-    name="OpenDP3", debug=False, bootloader_ignore_signals=False,
+    name="OpenPowerstation", debug=False, bootloader_ignore_signals=False,
     strip=False, upx=False, console=False, disable_windowed_traceback=True,
-    icon=str(root / "packaging/OpenDP3.ico"),
+    icon=str(root / "packaging/OpenPowerstation.ico"),
     version=str(root / "packaging/version_info.txt"),
 )

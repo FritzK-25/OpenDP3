@@ -22,7 +22,7 @@ INTRO = ("Choose your DP3, then provide its owner's EcoFlow user ID. Only the op
 IDLE_STATUS = "No passwords or account IDs should be pasted into chat."
 BRIDGE = ("Publishes the current DP3 and Jackery readings to a Home Assistant MQTT broker on "
           "your network, which creates the sensors and optional controls for you. The "
-          "connection is outbound only: OpenDP3 never listens for one. Recording continues "
+          "connection is outbound only: OpenPowerstation never listens for one. Recording continues "
           "normally if the broker is unreachable. Leave the address empty to publish nothing.")
 BRIDGE_SECURITY = ("The broker password is stored in config.json beside your recordings, "
                    "encrypted with Windows DPAPI to this account -- another account on this "
@@ -31,9 +31,9 @@ BRIDGE_SECURITY = ("The broker password is stored in config.json beside your rec
 CONTROL = ("Lets Home Assistant control the DP3 HV/LV AC outputs and the Jackery AC/DC "
            "outputs, Battery Saving Mode, and screen timeout. Everything else stays blocked: "
            "power-off, factory reset, Wi-Fi, firmware and arbitrary battery-boundary writes "
-           "are never sent. Leave this off and OpenDP3 stays read-only.")
+           "are never sent. Leave this off and OpenPowerstation stays read-only.")
 CONTROL_CAUTION = ("Anything with access to your broker can change these device settings. "
-                   "OpenDP3 publishes controls from fresh device feedback rather than assuming "
+                   "OpenPowerstation publishes controls from fresh device feedback rather than assuming "
                    "a write succeeded; a control is unavailable when its readback is stale or "
                    "missing. Do not enable this if an output or setting change could interrupt "
                    "something important.")
@@ -222,7 +222,7 @@ class BridgeForm(QWidget):
         self.control.setAccessibleName("Allow Home Assistant to control the DP3 and Jackery")
         layout.addWidget(self.control)
         self.status = label("Saving stores the broker only. Start publishing by running "
-                            "OpenDP3-Bridge.cmd from the source installation.", "muted", wrap=True)
+                            "OpenPowerstation-Bridge.cmd from the source installation.", "muted", wrap=True)
         layout.addWidget(self.status)
         self.load()
 

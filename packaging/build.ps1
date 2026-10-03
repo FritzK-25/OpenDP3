@@ -1,6 +1,6 @@
 # Builds the standalone executable. Never starts, stops, or replaces a running recorder.
 #
-# The output filename defaults to OpenDP3-<version>.exe, derived from the single
+# The output filename defaults to OpenPowerstation-<version>.exe, derived from the single
 # version source in src/opendp3/__init__.py. Pass -OutputName to override.
 param([string]$OutputName = "")
 $ErrorActionPreference = "Stop"
@@ -19,16 +19,16 @@ function Test-FileLocked([string]$Path) {
 if ([string]::IsNullOrWhiteSpace($OutputName)) {
     $version = (& $pythonExe (Join-Path $PSScriptRoot "project_version.py")).Trim()
     if ($LASTEXITCODE -ne 0) { throw "Could not read the project version." }
-    $OutputName = "OpenDP3-$version.exe"
+    $OutputName = "OpenPowerstation-$version.exe"
 }
-if ($OutputName -notmatch '^OpenDP3(?:-[0-9]+\.[0-9]+\.[0-9]+)?\.exe$') {
-    throw "OutputName must be OpenDP3.exe or a versioned OpenDP3 executable filename."
+if ($OutputName -notmatch '^OpenPowerstation(?:-[0-9]+\.[0-9]+\.[0-9]+)?\.exe$') {
+    throw "OutputName must be OpenPowerstation.exe or a versioned OpenPowerstation executable filename."
 }
 
 # Fail before the build, not after 70 seconds of work. Replacing the executable
 # behind a live recording is exactly what the versioned filename exists to avoid.
 $targetPath = Join-Path $projectRoot $OutputName
-foreach ($candidate in @($targetPath, (Join-Path $projectRoot "dist/OpenDP3.exe"))) {
+foreach ($candidate in @($targetPath, (Join-Path $projectRoot "dist/OpenPowerstation.exe"))) {
     if (Test-FileLocked $candidate) {
         throw ("$candidate is in use by a running process. Close it, or build under a " +
                "different version so the running recorder keeps its executable.")
@@ -53,9 +53,9 @@ Push-Location -LiteralPath $projectRoot
 try {
     & $pythonExe packaging/prepare.py
     if ($LASTEXITCODE -ne 0) { throw "Packaging preparation failed." }
-    & $pythonExe -m PyInstaller --clean --noconfirm --distpath dist --workpath build packaging/OpenDP3.spec
+    & $pythonExe -m PyInstaller --clean --noconfirm --distpath dist --workpath build packaging/OpenPowerstation.spec
     if ($LASTEXITCODE -ne 0) { throw "Executable build failed." }
-    Copy-Item -LiteralPath (Join-Path $projectRoot "dist/OpenDP3.exe") -Destination $targetPath
+    Copy-Item -LiteralPath (Join-Path $projectRoot "dist/OpenPowerstation.exe") -Destination $targetPath
     $digest = (Get-FileHash -LiteralPath $targetPath -Algorithm SHA256).Hash.ToLower()
     Set-Content -LiteralPath "$targetPath.sha256" -Value "$digest  $OutputName" -Encoding ascii
     Write-Output "Built standalone $OutputName. Build does not start or stop recording."
