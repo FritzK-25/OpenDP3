@@ -9,7 +9,8 @@ installation or separately installed Python is needed. It is unsigned.
 Double-click the executable to open the desktop. It does not automatically
 claim the battery. If a data directory exists beside the executable, it reuses
 that directory. Otherwise it stores configuration and recordings in
-%LOCALAPPDATA%/OpenDP3. The data directory is never inside the executable's
+%LOCALAPPDATA%/OpenPowerstation, or %LOCALAPPDATA%/OpenDP3 if that folder
+already exists from before the rename. The data directory is never inside the executable's
 temporary extraction directory. Moving only the executable to another PC
 does not move account IDs or recordings.
 

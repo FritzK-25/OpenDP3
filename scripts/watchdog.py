@@ -1,6 +1,6 @@
 """Keep the OpenPowerstation recorder and MQTT bridges healthy.
 
-This is the one process owned by the Windows ``OpenDP3 Recorder`` scheduled
+This is the one process owned by the Windows ``OpenPowerstation Recorder`` scheduled
 task.  It starts the detached workers through ``start_all.py`` and periodically
 checks both the recording databases and the retained MQTT health topics.  Recovery is scoped to one worker. Device absence and broker outages never
 restart a collector that still owns its database.

@@ -9,7 +9,7 @@
 ##>
 [CmdletBinding()]
 param(
-    [string]$TaskName = 'OpenDP3 Recorder',
+    [string]$TaskName = 'OpenPowerstation Recorder',
     [string]$DataDir = (Join-Path $PSScriptRoot '..\data'),
     [string]$Python = (Join-Path $PSScriptRoot '..\.venv\Scripts\python.exe')
 )
@@ -41,6 +41,18 @@ $logon = New-ScheduledTaskTrigger -AtLogOn -User $user
 $retry = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(2) `
     -RepetitionInterval (New-TimeSpan -Minutes 2)
 $triggers = @($logon, $retry)
+
+# The task was named 'OpenDP3 Recorder' before the rename. Remove it so two
+# watchdogs never compete for Bluetooth or SQLite.
+$legacyTaskName = 'OpenDP3 Recorder'
+if ($TaskName -ne $legacyTaskName) {
+    $legacy = Get-ScheduledTask -TaskName $legacyTaskName -ErrorAction SilentlyContinue
+    if ($legacy) {
+        Stop-ScheduledTask -TaskName $legacyTaskName -ErrorAction SilentlyContinue
+        Unregister-ScheduledTask -TaskName $legacyTaskName -Confirm:$false
+        Write-Host "Removed the old $legacyTaskName task."
+    }
+}
 
 $existing = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
 if ($existing) {
