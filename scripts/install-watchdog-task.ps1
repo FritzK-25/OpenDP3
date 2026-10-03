@@ -10,11 +10,15 @@
 [CmdletBinding()]
 param(
     [string]$TaskName = 'OpenPowerstation Recorder',
-    [string]$DataDir = (Join-Path $PSScriptRoot '..\data'),
-    [string]$Python = (Join-Path $PSScriptRoot '..\.venv\Scripts\python.exe')
+    [string]$DataDir,
+    [string]$Python
 )
 
 $ErrorActionPreference = 'Stop'
+# Windows PowerShell leaves $PSScriptRoot empty while evaluating parameter
+# defaults under `powershell -File`, so the defaults are filled in here.
+if (-not $DataDir) { $DataDir = Join-Path $PSScriptRoot '..\data' }
+if (-not $Python) { $Python = Join-Path $PSScriptRoot '..\.venv\Scripts\python.exe' }
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 # A fresh checkout has no data folder yet; Resolve-Path fails on a missing path.
 New-Item -ItemType Directory -Path $DataDir -Force | Out-Null
