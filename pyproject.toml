@@ -45,3 +45,5 @@ where = ["src"]
 testpaths = ["tests"]
 asyncio_mode = "auto"
 qt_api = "pyside6"
+# A test stuck this long dumps every thread's traceback instead of hanging silently.
+faulthandler_timeout = 120

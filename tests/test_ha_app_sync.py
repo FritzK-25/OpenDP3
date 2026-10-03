@@ -17,3 +17,11 @@ def test_home_assistant_app_version_matches_the_package():
     import opendp3
     config = (ROOT / "home-assistant" / "opendp3" / "config.yaml").read_text("utf-8")
     assert f'version: "{opendp3.__version__}"' in config
+
+
+def test_source_digest_order_does_not_depend_on_the_platform():
+    # The digest hashes files in tree_files() order. Sorting Path objects
+    # orders them differently on Windows, so the recorded digest only ever
+    # matched one OS; plain string order is the same everywhere.
+    files = list(sync_ha_app.tree_files(ROOT / "src"))
+    assert files == sorted(files)
