@@ -8,6 +8,18 @@ name = "opendp3"
 dynamic = ["version"]
 description = "Local Bluetooth telemetry, history and Home Assistant bridge for EcoFlow and Jackery power stations"
 requires-python = ">=3.12"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "THIRD_PARTY_LICENSES/*"]
+authors = [{ name = "OpenDP3 contributors" }]
+keywords = ["ecoflow", "jackery", "bluetooth", "ble", "home-assistant", "telemetry"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: Home Automation",
+]
 # Headless collectors, bridges and the CLI. This is what the production add-on
 # installs, so anything added here ships to the Pi. Rendering and desktop
 # packages belong in the extras below; home-assistant/opendp3/requirements-headless.txt
@@ -31,6 +43,12 @@ gui = ["opendp3[charts]", "PySide6>=6.8,<7", "pyqtgraph>=0.13,<0.15"]
 # only the three Qt modules need more than this.
 test = ["opendp3[charts,packaging]", "pytest>=8,<10", "pytest-asyncio>=1,<2"]
 test-gui = ["opendp3[gui]", "pytest-qt>=4,<5"]
+
+[project.urls]
+Homepage = "https://github.com/FritzK-25/OpenDP3"
+Documentation = "https://github.com/FritzK-25/OpenDP3/blob/main/docs/REFERENCE.md"
+Issues = "https://github.com/FritzK-25/OpenDP3/issues"
+Changelog = "https://github.com/FritzK-25/OpenDP3/blob/main/home-assistant/opendp3/CHANGELOG.md"
 
 [project.scripts]
 opendp3 = "opendp3.cli:main"
