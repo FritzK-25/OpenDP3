@@ -6,10 +6,15 @@ name: Windows build
 #
 # It installs from requirements.lock (exact pins), not from the version ranges
 # in pyproject.toml that the test matrix uses, then runs packaging/release.ps1:
-# tests, PyInstaller build, frozen verification.
+# tests (unless run-tests is false), PyInstaller build, frozen verification.
 
 on:
   workflow_call:
+    inputs:
+      run-tests:
+        description: Run the test suite before building.
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -23,6 +28,10 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            packaging/requirements-build.txt
       - name: Install build environment
         shell: pwsh
         run: |
@@ -34,7 +43,8 @@ jobs:
         shell: pwsh
         env:
           QT_QPA_PLATFORM: offscreen
-        run: .\packaging\release.ps1
+        run: |
+          if ("${{ inputs.run-tests }}" -eq "true") { .\packaging\release.ps1 } else { .\packaging\release.ps1 -SkipTests }
       - uses: actions/upload-artifact@v7
         with:
           name: windows-executable
