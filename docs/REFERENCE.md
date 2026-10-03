@@ -73,7 +73,8 @@ filename; `-OutputName OpenPowerstation.exe` is an explicit override.
 
 If a data folder exists beside the executable, it uses that folder, including
 any existing setup and recordings. Otherwise it uses
-%LOCALAPPDATA%/OpenDP3. Copying only the executable does not copy your account
+%LOCALAPPDATA%/OpenPowerstation (or %LOCALAPPDATA%/OpenDP3 if that folder
+already exists from an install made before the rename). Copying only the executable does not copy your account
 setup or recordings. Optional arguments: --data-dir PATH and a recording
 database path. Keep the executable outside protected system folders.
 
@@ -757,7 +758,8 @@ do not prove device origin or prevent deliberate alteration. See the
 
 The launcher stores configuration and recordings in data/ beside the project.
 Direct CLI usage defaults to the user's platform data directory
-(%LOCALAPPDATA%\OpenDP3 on Windows); use --data-dir before the subcommand to
+(%LOCALAPPDATA%\OpenPowerstation on Windows, or %LOCALAPPDATA%\OpenDP3 if
+that folder already exists from before the rename); use --data-dir before the subcommand to
 choose the same local directory as the launcher.
 
 The config.json file contains device selection and the account user ID,
