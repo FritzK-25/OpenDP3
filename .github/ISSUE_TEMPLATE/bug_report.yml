@@ -1,0 +1,56 @@
+name: Bug report
+description: Something in OpenDP3 does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Never post private identifiers.** No device serials, Bluetooth
+        addresses, account IDs, MQTT credentials or raw recordings. Replace
+        them with fake values such as `AA:BB:CC:DD:EE:FF`.
+  - type: input
+    id: version
+    attributes:
+      label: OpenDP3 version
+      placeholder: "0.2.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you run it
+      options:
+        - Windows executable
+        - Home Assistant app
+        - From source (pip install -e .)
+    validations:
+      required: true
+  - type: dropdown
+    id: device
+    attributes:
+      label: Device
+      options:
+        - EcoFlow DELTA Pro 3
+        - Jackery Explorer 1000 v2
+        - Other / not device-specific
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The commands you ran or the buttons you pressed, in order.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log output
+      description: Remove identifiers first.
+      render: text
