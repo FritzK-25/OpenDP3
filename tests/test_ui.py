@@ -12,7 +12,6 @@ import pytest
 
 from opendp3 import DECODER_VERSION, __version__
 from opendp3.config import load_config
-from opendp3.demo import make_demo
 from opendp3.exporting import export_evidence
 from opendp3.gui import Window
 from opendp3.ui import prefs, theme
@@ -41,9 +40,9 @@ def contrast(foreground, background):
 
 
 @pytest.fixture
-def demo(qtbot, tmp_path):
+def demo(qtbot, tmp_path, demo_database):
     """A window showing the synthetic demonstration, fully rendered."""
-    database = make_demo(tmp_path / "demo.sqlite", seconds=900)
+    database = demo_database(tmp_path / "demo.sqlite", seconds=900)
     window = Window(tmp_path, database)
     qtbot.addWidget(window)
     window.resize(1500, 1000)
@@ -285,8 +284,8 @@ def test_incidents_page_actions(demo):
     assert demo.cursor <= end_t
 
 
-def test_exports_page_lists_bundles(qtbot, tmp_path):
-    database = make_demo(tmp_path / "demo.sqlite", seconds=300)
+def test_exports_page_lists_bundles(qtbot, tmp_path, demo_database):
+    database = demo_database(tmp_path / "demo.sqlite", seconds=300)
     exports = tmp_path / "exports"
     export_evidence(database, exports / "OpenDP3-20260830-120000-000001")
     export_evidence(database, exports / "OpenDP3-20260830-133000-000002")
