@@ -41,7 +41,7 @@ gui = ["opendp3[charts]", "PySide6>=6.8,<7", "pyqtgraph>=0.13,<0.15"]
 # Everything the suite needs except the desktop window. The export privacy
 # assertions and the Windows-resource test are part of a plain `[test]` run;
 # only the three Qt modules need more than this.
-test = ["opendp3[charts,packaging]", "pytest>=8,<10", "pytest-asyncio>=1,<2"]
+test = ["opendp3[charts,packaging]", "pytest>=8,<10", "pytest-asyncio>=1,<2", "pytest-xdist>=3.6,<4"]
 test-gui = ["opendp3[gui]", "pytest-qt>=4,<5"]
 
 [project.urls]
