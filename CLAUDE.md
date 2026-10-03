@@ -32,6 +32,7 @@ docker run --rm -v "$PWD":/src:ro -e QT_QPA_PLATFORM=offscreen ubuntu:24.04 bash
 python -m pytest -q
 python scripts/sync_ha_app.py --check
 python scripts/generate_protocol_reference.py --check
+ruff check .
 ```
 
 After changing `src/`, `LICENSE` or the third-party notices, run

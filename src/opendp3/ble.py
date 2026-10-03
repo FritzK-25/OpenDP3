@@ -6,7 +6,6 @@ outbound gate refuses them unless the operator enabled control in Settings.
 import asyncio
 from collections import deque
 import hashlib
-import logging
 import time
 import sys
 

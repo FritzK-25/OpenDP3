@@ -6,7 +6,6 @@ import time
 
 import portalocker
 import pytest
-from conftest import add
 from opendp3.config import Config,save_config,load_config,resolve_user_id
 from opendp3.protocol import Identity,AuthenticationError
 from opendp3.runtime import Service
