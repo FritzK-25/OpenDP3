@@ -200,3 +200,65 @@ def test_winrt_connectable_advertisement_is_required():
     assert _winrt_connectable(directed) is True
     assert _winrt_connectable(beacon) is False
     assert _winrt_connectable(object()) is None
+
+
+def _discovery_fakes(monkeypatch, serials):
+    """Advertise one Explorer per serial, in order, and record what is attached."""
+    from types import SimpleNamespace
+    from opendp3 import jackery
+
+    opened = []
+
+    class FakeScanner:
+        def __init__(self, detection_callback, **_):
+            self.callback = detection_callback
+
+        async def start(self):
+            for index, serial in enumerate(serials):
+                device = SimpleNamespace(address=f"AA:BB:CC:DD:EE:{index:02X}",
+                                         name="HT Explorer")
+                advertisement = SimpleNamespace(manufacturer_data={"serial": serial},
+                                                service_data={}, rssi=-50)
+                self.callback(device, advertisement)
+
+        async def stop(self):
+            pass
+
+    class FakeReader:
+        def __init__(self, identity):
+            self.identity = identity
+
+        async def open(self):
+            opened.append(self.identity.serial)
+            return self
+
+    def parse(manufacturer_data, _service_data):
+        return jackery.Identity("", "", manufacturer_data["serial"], 8, 50, None, "key")
+
+    async def no_device_id(*_):
+        return None
+
+    monkeypatch.setattr(jackery, "BleakScanner", FakeScanner)
+    monkeypatch.setattr(jackery, "LocalReader", FakeReader)
+    monkeypatch.setattr(jackery, "parse_advertisement", parse)
+    monkeypatch.setattr(jackery, "_winrt_device_id", no_device_id)
+    monkeypatch.setattr(jackery, "_winrt_address_type", lambda _device: None)
+    return jackery, opened
+
+
+async def test_discover_reader_skips_other_explorers_when_given_a_serial(monkeypatch):
+    jackery, opened = _discovery_fakes(monkeypatch, ["111111111111111", "222222222222222"])
+
+    reader = await jackery.discover_reader(1, "222222222222222")
+
+    assert reader.identity.serial == "222222222222222"
+    assert opened == ["222222222222222"]
+
+
+async def test_discover_reader_without_a_serial_takes_the_first_explorer(monkeypatch):
+    jackery, opened = _discovery_fakes(monkeypatch, ["111111111111111", "222222222222222"])
+
+    reader = await jackery.discover_reader(1)
+
+    assert reader.identity.serial == "111111111111111"
+    assert opened == ["111111111111111"]

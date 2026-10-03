@@ -186,17 +186,17 @@ def main():
         state_path = Path(args[1]) / JACKERY_ADDRESS_STATE
         original_discover = jackery.discover_reader
 
-        async def recover_then_discover(timeout=30):
+        async def recover_then_discover(timeout=30, wanted=None):
             known_address = load_known_jackery_address(state_path, serial)
             await disconnect_jackery_orphan(
                 serial,
                 known_address=known_address,
             )
-            reader = await original_discover(timeout)
-            # discover_reader() is intentionally generic and may attach to a
-            # different Explorer that advertises first. The CLI rejects that
-            # reader immediately afterward; do not poison our recovery state by
-            # learning its address under the configured serial first.
+            reader = await original_discover(timeout, wanted)
+            # Without a serial, discover_reader() attaches to whichever Explorer
+            # advertises first, and the CLI rejects a stranger immediately
+            # afterward; do not poison our recovery state by learning its
+            # address under the configured serial first.
             if reader.identity.serial == serial:
                 try:
                     save_known_jackery_address(state_path, serial, reader.identity.address)
