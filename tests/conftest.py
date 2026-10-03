@@ -1,6 +1,7 @@
 import os
 os.environ.setdefault("QT_QPA_PLATFORM","offscreen")
 os.environ.setdefault("MPLCONFIGDIR",os.path.abspath("artifacts/matplotlib"))
+import shutil
 import time
 import pytest
 from opendp3.vendor.packet import Packet
@@ -20,6 +21,24 @@ def evidence(tmp_path):
     with Store(tmp_path/"recording.sqlite",reserve_bytes=0) as store:
         recorder = Recorder(store,utc_ns=1_000_000_000_000_000_000,mono_ns=0)
         yield store,recorder
+
+@pytest.fixture(scope="session")
+def demo_database(tmp_path_factory):
+    """make_demo(path, seconds), built once per length and copied for each test.
+
+    make_demo commits every frame with synchronous=FULL, about 1,800 fsyncs for
+    the 900 s demo. That is under a second on Linux but several seconds on a
+    Windows runner, paid again by every GUI test, and was most of the Windows
+    suite's run time. Each test still gets its own file to change.
+    """
+    from opendp3.demo import make_demo
+    built = {}
+    def copy(path, seconds=900):
+        if seconds not in built:
+            built[seconds] = make_demo(tmp_path_factory.mktemp("demo")/"demo.sqlite", seconds=seconds)
+        shutil.copyfile(built[seconds], path)
+        return path
+    return copy
 
 def add(rec,raw,t,wall_offset=0):
     rec.ingest(raw,rec.start_utc+int((t+wall_offset)*1e9),rec.start_mono+int(t*1e9))
