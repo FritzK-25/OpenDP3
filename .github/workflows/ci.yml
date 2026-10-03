@@ -34,3 +34,28 @@ jobs:
         run: python scripts/generate_protocol_reference.py --check
       - name: Home Assistant app copy is current
         run: python scripts/sync_ha_app.py --check
+
+  # The release build, with the release's pinned environment. Runs here so a
+  # broken build or a lockfile/pyproject mismatch shows up before tagging.
+  windows-build:
+    uses: ./.github/workflows/windows-build.yml
+
+  home-assistant-app:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the app image
+        run: |
+          version=$(python3 packaging/project_version.py)
+          docker build home-assistant/opendp3 --tag opendp3-app:ci \
+            --build-arg BUILD_VERSION="$version" --build-arg BUILD_ARCH=amd64
+      - name: Headless entry points import inside the image
+        run: |
+          docker run --rm opendp3-app:ci python -c "
+          import json, opendp3, opendp3.cli, opendp3.bridge, opendp3.jackery_bridge, opendp3.recorder
+          import run, linux_worker, bluetooth_status
+          provenance = json.load(open('/opt/opendp3/SOURCE-PROVENANCE.json'))
+          assert provenance['version'] == opendp3.__version__, provenance
+          print('OpenDP3', opendp3.__version__, 'image OK')
+          "

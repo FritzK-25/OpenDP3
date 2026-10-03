@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # requirements.txt (the pinned Windows/release environment, read through
+  # requirements.lock), packaging/requirements-build.txt (PyInstaller) and the
+  # Home Assistant app's requirements-headless.txt. Grouped so the root and
+  # app pins move together in one pull request; tests/test_packaging_extras.py
+  # checks the app still pins the same package set as pyproject.toml.
+  - package-ecosystem: pip
+    directories:
+      - "/"
+      - "/packaging"
+      - "/home-assistant/opendp3"
+    schedule:
+      interval: weekly
+    groups:
+      python:
+        patterns: ["*"]
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
