@@ -32,7 +32,7 @@ class IncidentsPage(QWidget):
         self.mark_button = QPushButton("Mark incident")
         self.mark_button.clicked.connect(window.mark)
         self.export_button = QPushButton("Export selected incident…")
-        self.export_button.clicked.connect(window.export)
+        self.export_button.clicked.connect(window.export_incident)
         self.delete_button = QPushButton("Delete selected incident protection")
         self.delete_button.setObjectName("danger")
         self.delete_button.clicked.connect(window.delete_incident)
@@ -55,8 +55,21 @@ class IncidentsPage(QWidget):
         layout.addWidget(split, 1)
 
     def selected(self):
-        item = self.incident_table.item(self.incident_table.currentRow(), 0)
+        """The incident the user selected, or None.
+
+        The selection, not the current row: Qt keeps a current row after the
+        selection is gone, and rows are rewritten in place for each snapshot.
+        """
+        rows = self.incident_table.selectionModel().selectedRows()
+        item = self.incident_table.item(rows[0].row(), 0) if rows else None
         return int(item.text()) if item else None
+
+    def clear_selection(self):
+        self.incident_table.blockSignals(True)
+        self.incident_table.clearSelection()
+        self.incident_table.setCurrentCell(-1, -1)
+        self.incident_table.blockSignals(False)
+        self.update_actions()
 
     def on_selection(self):
         # Qt clears the selection while tearing the window down, firing this signal
@@ -71,12 +84,15 @@ class IncidentsPage(QWidget):
             return
         has_selection = self.selected() is not None
         self.delete_button.setEnabled(has_selection)
-        self.export_button.setEnabled(bool(self.window.snap.get("count")))
+        self.export_button.setEnabled(has_selection and bool(self.window.snap.get("count")))
         self.mark_button.setEnabled(self.window.can_mark())
 
     def update_snapshot(self, snap, now_t):
         self.incident_table.blockSignals(True)
         selected = self.selected()
+        # The selection follows the incident, not the row: rewritten in place,
+        # a row would otherwise pass it to whichever incident lands there.
+        self.incident_table.clearSelection()
         self.incident_table.setRowCount(len(snap["incidents"]))
         for i, incident in enumerate(snap["incidents"]):
             coverage = "Window complete" if incident["complete"] else "Incomplete window"
@@ -88,6 +104,8 @@ class IncidentsPage(QWidget):
                 self.incident_table.setItem(i, j, QTableWidgetItem(value))
             if selected == incident["id"]:
                 self.incident_table.selectRow(i)
+        if self.selected() is None:
+            self.incident_table.setCurrentCell(-1, -1)
         self.incident_table.blockSignals(False)
         events = list(reversed(snap["events"][-100:]))
         self.events_table.setRowCount(len(events))

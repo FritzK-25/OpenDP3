@@ -54,6 +54,8 @@ def test_bridge_publishes_documented_selects_from_existing_raw_readback():
         "last_utc_ns": now,
         "count": 1,
         "values": {
+            # Core telemetry, without which a reading is not live.
+            "bms_batt_soc": {"value": 80.0, "quality": "ble_observed", "utc_ns": now, "t": 0.0},
             "jackery_charge_mode": {"value": 1.0, "quality": "ble_observed", "utc_ns": now, "t": 0.0},
             "jackery_energy_saving_mode": {"value": 720.0, "quality": "ble_observed", "utc_ns": now, "t": 0.0},
         },

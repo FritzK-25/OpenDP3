@@ -1,5 +1,6 @@
 """Recover orphaned battery BlueZ links before OpenPowerstation rediscovery."""
 import asyncio
+import contextlib
 import json
 import os
 from pathlib import Path
@@ -9,6 +10,57 @@ import sys
 JACKERY_ADDRESS_STATE = "jackery-bluez.json"
 MAC_RE = re.compile(r"(?:[0-9A-F]{2}:){5}[0-9A-F]{2}")
 ADAPTER_RE = re.compile(r"hci[0-9]+")
+# How long one orphan check may take in all: connecting to the system bus,
+# reading BlueZ's device inventory, releasing a link and the second after it.
+# Past this it is abandoned and discovery goes ahead without it. It runs under
+# the shared adapter lease, whose hold limit (radio.RADIO_HOLD_LIMIT) the DP3's
+# scan, connect and handshake have to fit into after it.
+ORPHAN_CHECK_TIMEOUT = 12.0
+
+
+class AmbiguousOrphan(ConnectionError):
+    """More than one connected device matched; which link is ours is unknown."""
+
+
+class OrphanCheck:
+    """One collector's orphan release, run as best effort and bounded in time.
+
+    Releasing a link BlueZ still holds helps rediscovery; it is not a
+    condition for it. It used to run unguarded in front of every discovery,
+    so any failure in it stopped every DP3 scan for as long as it lasted, and
+    ended the Jackery collector for anything not an OSError: dbus-fast missing
+    or changed after a rebuild, the system bus refusing the connection
+    (dbus-fast's AuthError), BlueZ answering with an error, or a call that
+    never returned. Now a failure is logged by its type alone, once until the
+    check works again, and discovery goes ahead.
+
+    AmbiguousOrphan is the exception: two connected candidates for one
+    Explorer mean this worker cannot tell which link is its own, so the
+    attempt is still refused, as a ConnectionError the collector records and
+    retries.
+    """
+
+    def __init__(self, release, label, *, timeout=None):
+        self.release, self.label = release, label
+        self.timeout = ORPHAN_CHECK_TIMEOUT if timeout is None else timeout
+        self.failing = None
+
+    async def __call__(self, *args, **kwargs):
+        try:
+            async with asyncio.timeout(self.timeout):
+                await self.release(*args, **kwargs)
+        except AmbiguousOrphan:
+            raise
+        except Exception as exc:
+            kind = type(exc).__name__
+            if kind != self.failing:
+                print(f"BlueZ orphan check for {self.label} skipped ({kind}); "
+                      "discovering anyway.", flush=True)
+            self.failing = kind
+            return
+        if self.failing is not None:
+            print(f"BlueZ orphan check for {self.label} working again.", flush=True)
+        self.failing = None
 
 
 def selected_adapter():
@@ -77,8 +129,11 @@ def save_known_jackery_address(path: Path, serial: str, address: str):
 
 
 async def _disconnect_matching(match, label, *, require_unique=False, adapter=None,
-                               bus_factory=None):
-    """Disconnect connected BlueZ devices selected by a narrow predicate."""
+                               bus_factory=None) -> int:
+    """Disconnect connected BlueZ devices selected by a narrow predicate.
+
+    Returns how many links were released.
+    """
     from dbus_fast import BusType, Message, MessageType
     from dbus_fast.aio import MessageBus
     bus = await (bus_factory() if bus_factory else MessageBus(bus_type=BusType.SYSTEM)).connect()
@@ -101,7 +156,7 @@ async def _disconnect_matching(match, label, *, require_unique=False, adapter=No
                 matches.append(path)
 
         if require_unique and len(matches) > 1:
-            raise ConnectionError(f"Multiple connected {label} BLE candidates; refusing orphan recovery")
+            raise AmbiguousOrphan(f"Multiple connected {label} BLE candidates; refusing orphan recovery")
 
         for path in matches:
             result = await asyncio.wait_for(bus.call(Message(
@@ -113,14 +168,15 @@ async def _disconnect_matching(match, label, *, require_unique=False, adapter=No
             # Give the station and BlueZ a moment to return to advertising before
             # the scanner starts. This is especially important for the Explorer.
             await asyncio.sleep(1)
+        return len(matches)
     finally:
         bus.disconnect()
 
 
-async def disconnect_orphan(address, *, adapter=None, bus_factory=None):
+async def disconnect_orphan(address, *, adapter=None, bus_factory=None) -> int:
     """Release the configured EcoFlow address if BlueZ still owns its link."""
     address = address.upper()
-    await _disconnect_matching(
+    return await _disconnect_matching(
         lambda values: str(values.get("Address", "")).upper() == address,
         "EcoFlow",
         adapter=adapter,
@@ -129,7 +185,7 @@ async def disconnect_orphan(address, *, adapter=None, bus_factory=None):
 
 
 async def disconnect_jackery_orphan(serial, *, known_address=None,
-                                    serial_resolver=None, adapter=None, bus_factory=None):
+                                    serial_resolver=None, adapter=None, bus_factory=None) -> int:
     """Release only a BlueZ Jackery link verified as the configured Explorer.
 
     The Explorer may stop advertising while BlueZ still reports an old local
@@ -148,7 +204,7 @@ async def disconnect_jackery_orphan(serial, *, known_address=None,
             return True
         return resolver(values) == serial
 
-    await _disconnect_matching(
+    return await _disconnect_matching(
         matches,
         "Jackery",
         require_unique=True,
@@ -165,38 +221,54 @@ def main():
     if len(args) < 3 or args[0] != "--data-dir":
         raise SystemExit("Unsupported headless worker arguments")
 
+    # Each wrapper is handed to the collector through cli.main, which calls it
+    # for every discovery attempt, not only the first. It used to be patched
+    # into openpowerstation.ble and openpowerstation.jackery, which reached the collectors only
+    # while they happened to look those names up through the module at call
+    # time; moving an import to the top of a file silently dropped the release.
     if len(args) == 3 and args[2] == "record":
         cfg = load_config(Path(args[1]) / "config.json")
         original_scan = ble.scan
+        release = OrphanCheck(disconnect_orphan, "EcoFlow")
 
-        async def recover_then_scan(timeout=8):
-            await disconnect_orphan(cfg.address)
-            return await original_scan(timeout)
+        async def recover_then_scan(*args, **kwargs):
+            # The scan keeps its own window (ble.SCAN_TIMEOUT), which the shared
+            # adapter lease's hold limit is sized against; this only adds the
+            # release before it, which never keeps the scan from running.
+            await release(cfg.address)
+            return await original_scan(*args, **kwargs)
 
-        ble.scan = recover_then_scan
-        return cli_main(args)
+        return cli_main(args, scan=recover_then_scan)
 
     if (len(args) == 5 and args[2] == "jackery-record" and args[3] == "--serial"
             and re.fullmatch(r"[0-9]{15}", args[4])):
-        # cli._jackery_ble_loop imports discover_reader when the writer lock is
-        # already held. Patch the module first so every later rediscovery attempt
-        # gets orphan cleanup, not just the first process startup.
         from openpowerstation import jackery
         serial = args[4]
         state_path = Path(args[1]) / JACKERY_ADDRESS_STATE
         original_discover = jackery.discover_reader
+        release = OrphanCheck(disconnect_jackery_orphan, "Jackery")
 
-        async def recover_then_discover(timeout=30, wanted=None):
+        async def recover_then_discover(timeout=30, *, lease=None, **_caller):
             known_address = load_known_jackery_address(state_path, serial)
-            await disconnect_jackery_orphan(
-                serial,
-                known_address=known_address,
-            )
-            reader = await original_discover(timeout, wanted)
-            # Without a serial, discover_reader() attaches to whichever Explorer
-            # advertises first, and the CLI rejects a stranger immediately
-            # afterward; do not poison our recovery state by learning its
-            # address under the configured serial first.
+            # The collector's adapter lease covers the BlueZ operations and not
+            # the search between them: this release under it, and the connect,
+            # which discovery takes it for once the Explorer advertises. Only
+            # two candidates for this Explorer stop the attempt here.
+            async with lease or contextlib.nullcontext():
+                await release(
+                    serial,
+                    known_address=known_address,
+                )
+            # This worker exists for one Explorer, so discovery is pinned to its
+            # serial whatever the caller passed: another station advertising
+            # first is ignored rather than connected to and then rejected.
+            options = {"serial": serial}
+            if lease is not None:
+                options["lease"] = lease
+            reader = await original_discover(timeout, **options)
+            # Defence in depth: should a discovery ever hand back a different
+            # Explorer, the CLI rejects it; do not poison our recovery state by
+            # learning its address under the configured serial first.
             if reader.identity.serial == serial:
                 try:
                     save_known_jackery_address(state_path, serial, reader.identity.address)
@@ -212,8 +284,7 @@ def main():
                     )
             return reader
 
-        jackery.discover_reader = recover_then_discover
-        return cli_main(args)
+        return cli_main(args, discover=recover_then_discover)
 
     raise SystemExit("Unsupported headless worker arguments")
 

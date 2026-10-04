@@ -16,13 +16,30 @@ JACKERY_OBSERVATIONS = tuple(
 )
 
 
+# Chart groups in display order. Every chart of a session -- the desktop's and
+# the evidence export's -- draws one panel per group its fields use, so a field
+# the registry gains is charted wherever the session is shown. State rows go
+# last, under the shared time axis.
+CHART_GROUPS = ("temperature", "power", "soc", "voltage", "frequency", "duration", "state")
+
+
 def is_jackery(session):
     # Compatibility with recordings made before explicit device metadata existed.
     return session.get("firmware", "").startswith("Jackery")
 
 
+def device(session):
+    """``jackery`` or ``dp3``: which registry, headline readings and labels a session gets."""
+    return "jackery" if is_jackery(session) else "dp3"
+
+
 def fields_for_session(session):
     return JACKERY_OBSERVATIONS if is_jackery(session) else DP3_FIELDS
+
+
+def chart_groups(session):
+    used = {field.group for field in fields_for_session(session)}
+    return tuple(group for group in CHART_GROUPS if group in used)
 
 
 def unavailable_for_session(session):

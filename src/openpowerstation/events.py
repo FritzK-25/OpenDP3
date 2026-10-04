@@ -6,7 +6,18 @@ GAP_KINDS = frozenset({
 })
 SEGMENT_KINDS = GAP_KINDS | {"connected", "telemetry_resumed"}
 PIN_KINDS = frozenset({"disconnected", "manual", "corrupt_transport", "capture_error", "host_suspend"})
-SAFE_EVENT_KINDS = SEGMENT_KINDS | PIN_KINDS | {
+# Pins the collector raises about its own link or host, not about what the
+# device reported. They keep context rather than evidence, so their protection
+# lapses (Store.maintain). Every other pin -- manual, device_error,
+# suspect_telemetry, unmapped_change, a supplied capture_error -- is kept until
+# a person removes it, and one such reason in a merged window keeps the whole
+# window. capture_gap pins through jackery_health rather than PIN_KINDS.
+COLLECTOR_PIN_KINDS = frozenset({"disconnected", "corrupt_transport", "host_suspend", "capture_gap"})
+# Collector diagnostics: recorded and exported, but they neither split a
+# segment nor pin history. A loop stall loses no frames -- notifications queue
+# and are stamped late -- so treating it as a gap would pin routine history.
+DIAGNOSTIC_KINDS = frozenset({"loop_stall"})
+SAFE_EVENT_KINDS = SEGMENT_KINDS | PIN_KINDS | DIAGNOSTIC_KINDS | {
     "suspect_telemetry", "device_error", "state_change", "clock_change", "connection_failed",
     "control", "control_refused", "control_unverified", "unmapped_change",
 }

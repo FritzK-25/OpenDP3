@@ -14,6 +14,10 @@ EMPTY = ("No evidence bundles in the default folder yet. Use Export evidence to 
          "one, then it appears here.")
 SCOPE = ("Only bundles written to the default folder are listed. Bundles you exported "
          "somewhere else still exist; this viewer does not track them.")
+# summary.json names the device (exporting.export_evidence); a bundle written
+# before it did says nothing either way.
+SOURCES = {"dp3": "DP3 recording", "jackery": "Jackery recording"}
+SCOPES = {"session": "whole session", "incident": "incident window"}
 
 
 def bundle_time(name: str):
@@ -74,7 +78,9 @@ class ExportsPage(QWidget):
         actions.setSpacing(8)
         self.export_button = QPushButton("Export evidence…")
         self.export_button.setObjectName("primary")
-        self.export_button.clicked.connect(window.export)
+        self.export_button.setToolTip("Exports the whole session selected on Overview. To export one "
+                                      "incident's window, select it on Incidents and export it there.")
+        self.export_button.clicked.connect(window.export_session)
         self.folder_button = QPushButton("Open bundle folder")
         self.folder_button.clicked.connect(lambda: self.open(lambda b: b["path"]))
         self.report_button = QPushButton("Open report")
@@ -117,10 +123,13 @@ class ExportsPage(QWidget):
             coverage = "Window complete" if summary.get("incident_window_complete") else "Incomplete window"
             if summary.get("contains_gaps"):
                 coverage += " · gaps"
+            window = f"{summary.get('elapsed_start_s', 0):.0f}–{summary.get('elapsed_end_s', 0):.0f}"
+            scope, device = str(summary.get("scope")), str(summary.get("device"))
+            if scope in SCOPES:
+                window += f" · {SCOPES[scope]}"
             values = [when,
-                      "SYNTHETIC DEMO" if summary.get("synthetic") else "DP3 recording",
-                      f"{summary.get('elapsed_start_s', 0):.0f}–{summary.get('elapsed_end_s', 0):.0f}",
-                      coverage, str(summary.get("decoder", "unknown"))]
+                      "SYNTHETIC DEMO" if summary.get("synthetic") else SOURCES.get(device, "Recording"),
+                      window, coverage, str(summary.get("decoder", "unknown"))]
             for j, value in enumerate(values):
                 self.bundle_table.setItem(i, j, QTableWidgetItem(value))
         self.update_actions()

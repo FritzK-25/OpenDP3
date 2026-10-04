@@ -6,7 +6,6 @@ moment someone reintroduces a hardcoded version, which is cheaper than finding
 out during a release.
 """
 import re
-import subprocess
 import sys
 from pathlib import Path
 
@@ -106,16 +105,5 @@ def test_windows_version_resource_is_generated_from_the_source():
         assert f"StringStruct('FileVersion', '{version}')" in text
         assert f"StringStruct('ProductVersion', '{version}')" in text
         assert "filevers=(" + ",".join(str(n) for n in numeric) + ")" in text
-
-
-def test_prepare_regenerates_the_resource_deterministically():
-    """prepare.py must be safe to re-run; the build calls it every time."""
-    resource = ROOT / "packaging/version_info.txt"
-    before = resource.read_text("utf-8") if resource.exists() else None
-    completed = subprocess.run([sys.executable, "packaging/prepare.py"], cwd=ROOT,
-                               capture_output=True, text=True, timeout=300)
-    assert completed.returncode == 0, completed.stderr
-    after = resource.read_text("utf-8")
-    assert openpowerstation.__version__ in after
-    if before is not None:
-        assert before == after, "prepare.py is not deterministic"
+    # Whether prepare.py regenerates it deterministically is tested in
+    # test_packaging_prepare.py, against a copy of the tree rather than this one.

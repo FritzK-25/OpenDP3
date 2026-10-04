@@ -12,9 +12,9 @@ import sys
 import ecdsa
 from bleak import BleakClient, BleakScanner
 
-from .protocol import (AuthenticationError, Identity, OutboundGate, ProtocolError,
-                       WireBuffer, auth_packet, control_packet, derive_session_key,
-                       identify, parse_packet)
+from .protocol import (AuthenticationError, CredentialsRejected, Identity, OutboundGate,
+                       ProtocolError, WireBuffer, auth_packet, control_packet,
+                       derive_session_key, identify, parse_packet)
 from .radio import bleak_adapter_kwargs
 from .vendor.encryption import Type1Encryption, Type7Encryption
 from .vendor.frame_assembler import EncPacketAssembler, RawHeaderAssembler, PassthroughAssembler
@@ -32,10 +32,50 @@ from .vendor.frame_assembler import EncPacketAssembler, RawHeaderAssembler, Pass
 SILENCE_TIMEOUT = 30.0
 SILENCE_LIMIT = 2
 
+# Consecutive frames that pass the transport checksum but do not decode as a
+# DP3 packet. One is corruption. A run means the session key no longer matches
+# -- the DP3 re-keyed, after another client's session for instance -- and
+# nothing short of a new handshake recovers; until the valid-frame lease ended
+# the session, it streamed about 80 s of them. The pinned upstream drops the
+# link at ten (connection.py _UNDECRYPTABLE_FRAME_LIMIT).
+UNDECODABLE_FRAME_LIMIT = 10
+
 # Recovery must not be able to hang inside its own cleanup. A BlueZ disconnect
 # can block exactly as thoroughly as the read it is abandoning, and an unbounded
 # one would hold the reconnect path open for as long as the stall it recovers.
 DISCONNECT_TIMEOUT = 5.0
+
+# Discovery always listens for its whole window; the connect is Bleak's own
+# deadline. Both run under the shared adapter lease, whose hold limit
+# (radio.RADIO_HOLD_LIMIT) is sized to leave the handshake room after them.
+SCAN_TIMEOUT = 8.0
+CONNECT_TIMEOUT = 20.0
+
+# Notifications held for the receive loop: minutes of DP3 uploads. A loop that
+# falls further behind than this drops what arrives meanwhile (Session.receive).
+RECEIVE_QUEUE_LIMIT = 2048
+
+# A GATT write the backend never answers. BlueZ itself fails an ATT request
+# that goes 30 s without a response, so this deadline only ends a call that
+# BlueZ or D-Bus never completes at all. It sits above that on purpose:
+# cancelling a write BlueZ may still deliver would leave more control outcomes
+# unknown, not fewer. Without it, the service loop that awaits a control write
+# inline -- stop requests, reconnects, every other command -- waited for as long
+# as the backend kept the call pending.
+WRITE_TIMEOUT = 35.0
+
+
+class CollectionEnded(ConnectionError):
+    """A connection attempt or session that ended for a known reason.
+
+    ``reason`` is one of runtime.REASONS, which Home Assistant is shown. Still
+    a ConnectionError, so everything that treats a lost transport as
+    recoverable goes on doing so.
+    """
+
+    def __init__(self, message: str, reason: str):
+        super().__init__(message)
+        self.reason = reason
 
 
 def _exception_detail(backend: str, operation: str, exc: BaseException) -> str:
@@ -68,7 +108,7 @@ async def adapter_status() -> dict:
     except Exception:
         return {'available': None, 'detail': 'Windows adapter query unavailable; trying a BLE scan.'}
 
-async def scan(timeout=8) -> list[tuple[Identity, object]]:
+async def scan(timeout=SCAN_TIMEOUT) -> list[tuple[Identity, object]]:
     status = await adapter_status()
     if status['available'] is False:
         raise ValueError(status['detail'])
@@ -88,14 +128,17 @@ class Session:
     def __init__(self, identity, device, user_id, on_frame, on_event, allow_control=False):
         self.identity, self.device, self.user_id = identity, device, user_id
         self.on_frame, self.on_event = on_frame, on_event
-        self.queue = asyncio.Queue(maxsize=2048)
+        self.queue = asyncio.Queue(maxsize=RECEIVE_QUEUE_LIMIT)
         self.pending = deque()
         self.gate = OutboundGate(allow_control)
         # Control is written from the service's command task while the session's
         # own task is reading. One writer at a time on the characteristic.
         self.write_lock = asyncio.Lock()
         self.disconnected = asyncio.Event()
-        self.overflow = False
+        # Notifications queued and read so far, and each run receive() had to
+        # drop: [notifications queued before it, how many it dropped].
+        self.queued = self.taken = 0
+        self.holes = deque()
         self.client = None
         self.authenticated = False
         self.codec = None
@@ -110,24 +153,55 @@ class Session:
         try:
             self.queue.put_nowait((bytes(data), *stamp))
         except asyncio.QueueFull:
-            self.overflow = True
-            self.disconnected.set()
+            # The link is up; this process stopped reading for long enough to
+            # fill the queue. Taken for a disconnect, as it once was, that threw
+            # away the whole backlog and blamed the radio. The drop is counted
+            # instead, at the place in the stream where it falls.
+            if self.holes and self.holes[-1][0] == self.queued:
+                self.holes[-1][1] += 1
+            else:
+                self.holes.append([self.queued, 1])
+            return
+        self.queued += 1
+
+    def _report_drops(self, utc, mono, before=None):
+        """Record each run of dropped notifications that lies before ``before``."""
+        while self.holes and (before is None or before > self.holes[0][0]):
+            _, count = self.holes.popleft()
+            self.on_event("capture_gap",
+                          f"Receive queue full ({RECEIVE_QUEUE_LIMIT} notifications): {count} "
+                          "dropped while the collector was not reading; capture is incomplete.",
+                          utc, mono)
+
+    def _take(self, item):
+        self.taken += 1
+        self._report_drops(item[1], item[2], before=self.taken)
+        return item
 
     async def _next(self, timeout=20):
-        if self.overflow:
-            raise ProtocolError("BLE receive queue overflow; capture is incomplete.")
         # Short timeout also makes a dropped connection fail promptly.
         async with asyncio.timeout(timeout):
             while True:
+                # What already arrived is read before a disconnect ends the
+                # session: those notifications are the frames around the drop,
+                # which its incident exists to keep.
+                if not self.queue.empty():
+                    return self._take(self.queue.get_nowait())
                 if self.disconnected.is_set():
-                    raise ConnectionError("Bluetooth disconnected.")
+                    raise CollectionEnded("Bluetooth disconnected.", "link_lost")
                 try:
-                    return await asyncio.wait_for(self.queue.get(), 0.25)
+                    return self._take(await asyncio.wait_for(self.queue.get(), 0.25))
                 except TimeoutError:
                     continue
 
     async def _write(self, *, command=None, packet=None):
-        """The only GATT write site. Both representations pass the policy gate."""
+        """The only GATT write site. Both representations pass the policy gate.
+
+        What this raises says whether anything reached the radio. PolicyError
+        and ProtocolError mean nothing was written. ConnectionError and
+        TimeoutError mean the write itself failed, possibly after the device
+        received it (_bounded_write).
+        """
         if command is not None:
             raw = self.gate.command(command)
         elif packet is not None:
@@ -142,7 +216,32 @@ class Session:
         chunk = 512 if response else self.write_char.max_write_without_response_size
         async with self.write_lock:
             for offset in range(0, len(raw), chunk):
-                await self.client.write_gatt_char(self.write_char, raw[offset:offset + chunk], response=response)
+                await self._bounded_write(raw[offset:offset + chunk], response)
+
+    async def _bounded_write(self, data, response):
+        """One GATT write, failing only as ConnectionError or TimeoutError.
+
+        As jackery._bounded_operation does for the Jackery. Bleak and the D-Bus
+        library under it raise their own exceptions -- BleakDBusError, the
+        EOFError dbus_fast hands a call pending on a bus that closed, the
+        AssertionError of Bleak's ``assert self._bus`` -- and an unclassified
+        one escaped the service loop, ending the recording with no record of
+        the command. A cancellation is the radio lease or the session teardown
+        acting, not a failure, and passes through unchanged.
+        """
+        deadline = None
+        try:
+            async with asyncio.timeout(WRITE_TIMEOUT) as deadline:
+                await self.client.write_gatt_char(self.write_char, data, response=response)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            detail = _exception_detail("Bleak", "write", exc)
+            if isinstance(exc, TimeoutError):
+                if deadline is not None and deadline.expired():
+                    detail += f"; timeout={WRITE_TIMEOUT:g}s"
+                raise TimeoutError(detail) from exc
+            raise ConnectionError(detail) from exc
 
     async def send_control(self, field: str, value: bool):
         """Send one allowlisted ConfigWrite. The gate re-checks before the wire."""
@@ -229,19 +328,21 @@ class Session:
                 p = parse_packet(raw)
                 if (p.src, p.cmd_set, p.cmd_id) == (0x35, 0x35, 0x86):
                     if p.payload != b"\x00":
-                        raise AuthenticationError("Device rejected authentication. Verify account binding and user ID.")
+                        raise CredentialsRejected("Device rejected authentication. Verify account binding and user ID.")
                     break
                 # Upstream accepts first telemetry as auth completion; narrow to DP3 upload.
                 if (p.src, p.cmd_set, p.cmd_id) == (2, 0xFE, 0x15):
                     self.pending.appendleft((raw, utc, mono))
                     break
         self.authenticated = True
-        self.gate.stage = "closed"  # No outbound traffic after authentication.
+        # Handshake allowlist closed. From here the gate passes only the opt-in
+        # AC-output ConfigWrite, and only while control is allowed.
+        self.gate.stage = "closed"
 
     async def _collect_authenticated(self):
         """Read frames until the device goes quiet or the transport gives up."""
         silence_reported = False
-        silent_rounds = 0
+        silent_rounds = undecodable = 0
         while True:
             try:
                 raw, utc, mono = await self._packet(timeout=SILENCE_TIMEOUT)
@@ -272,9 +373,9 @@ class Session:
                         f"consecutive_silences={silent_rounds}; transport_error=none_observed; "
                         "closing the stalled GATT session for reconnect.",
                         time.time_ns(), time.monotonic_ns())
-                    raise ConnectionError(
+                    raise CollectionEnded(
                         f"No telemetry for {SILENCE_TIMEOUT * silent_rounds:g} seconds while still "
-                        "connected; dropping the session to force reacquisition.") from exc
+                        "connected; dropping the session to force reacquisition.", "silent") from exc
                 continue
             silent_rounds = 0
             if silence_reported:
@@ -284,9 +385,22 @@ class Session:
             # Invalid post-auth frames are kept locally for diagnostic replay.
             try:
                 p = parse_packet(raw)
-            except ProtocolError:
+            except ProtocolError as exc:
                 self.on_frame(raw, utc, mono)
+                undecodable += 1
+                if undecodable >= UNDECODABLE_FRAME_LIMIT:
+                    self.reported_failure = True
+                    self.on_event(
+                        "session_error",
+                        f"{_exception_detail('protocol', 'frame_decode', exc)}; "
+                        f"consecutive_undecodable={undecodable}; the session key no longer "
+                        "matches the device's; closing the session to authenticate again.",
+                        utc, mono)
+                    raise CollectionEnded(
+                        f"{undecodable} consecutive frames did not decode; the session key "
+                        "no longer matches.", "undecodable_frames") from exc
                 continue
+            undecodable = 0
             if p.cmd_set == 0x35:
                 continue
             self.on_frame(raw, utc, mono)
@@ -296,7 +410,7 @@ class Session:
         self.client = BleakClient(
             self.device,
             disconnected_callback=lambda _: self.disconnected.set(),
-            timeout=20,
+            timeout=CONNECT_TIMEOUT,
             **bleak_adapter_kwargs(),
         )
         try:
@@ -320,6 +434,8 @@ class Session:
             # failure needs a second record. CancelledError is a BaseException
             # and is deliberately not caught here: a cancelled session is the
             # supervisor acting, not a fault to attribute to the transport.
+            # Notifications dropped before the end came first, so say so first.
+            self._report_drops(time.time_ns(), time.monotonic_ns())
             if not self.reported_failure:
                 self.on_event("session_error", _exception_detail("Bleak", "session", exc),
                               time.time_ns(), time.monotonic_ns())
@@ -342,3 +458,5 @@ class Session:
             self.user_id = ""
             while not self.queue.empty():
                 self.queue.get_nowait()
+            # Drops after the last notification read, which no later read reports.
+            self._report_drops(time.time_ns(), time.monotonic_ns())

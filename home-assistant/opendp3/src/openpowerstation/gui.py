@@ -18,8 +18,8 @@ from PySide6.QtWidgets import (
 )
 
 from . import __version__
-from .config import load_config
-from .queries import sessions, snapshot
+from .config import VIEWER_REFUSAL, load_config
+from .queries import elapsed_now, session_revision, sessions, snapshot, writer_live
 from .runtime import Service
 from .storage import Store
 from .ui import icons
@@ -120,6 +120,17 @@ def jackery_transport(session) -> str | None:
     return "cloud" if "cloud" in conditions.lower() else "local BLE"
 
 
+def span_text(seconds):
+    """A duration for a sentence: minutes, then hours, then days."""
+    minutes = int(max(0, seconds) // 60)
+    if minutes < 120:
+        return f"{minutes} min"
+    hours = minutes // 60
+    if hours < 48:
+        return f"{hours} h {minutes % 60} min"
+    return f"{hours // 24} days {hours % 24} h"
+
+
 class Window(QMainWindow, Jobs):
     def __init__(self, root: Path, database: Path | None = None):
         super().__init__()
@@ -135,8 +146,15 @@ class Window(QMainWindow, Jobs):
         self.database = None
         self.sid = None
         self.service = None
+        # Whether config.json makes this install a viewer, which may not record.
+        self.viewer = False
         self.snap = {}
+        # What the snapshot on screen was asked for (view_request); a saved
+        # session is queried again only when the view asks for something else
+        # or a probe finds it changed (probe).
+        self.shown = None
         self.loading = False
+        self.probing = False
         self.follow = True
         self.cursor = None
         self.chart_range = None
@@ -341,12 +359,14 @@ class Window(QMainWindow, Jobs):
         try:
             config = load_config(self.root/"config.json")
         except (FileNotFoundError,ValueError,TypeError):
+            self.viewer = False
             self.sidebar.set_device("DELTA Pro 3", "No device configured",
                                     "Open Settings to pair over local Bluetooth")
             return
+        self.viewer = config.role == "viewer"
         state = self.service.state if self.service and self.service.is_alive() else "not connected"
         self.sidebar.set_device("DELTA Pro 3", f"Serial {config.serial}",
-                                f"Bluetooth {state}")
+                                "Viewer: records nothing here" if self.viewer else f"Bluetooth {state}")
 
     # --- button state -----------------------------------------------------
 
@@ -360,7 +380,10 @@ class Window(QMainWindow, Jobs):
         active = self.recording()
         external = self.background_recording()
         state = self.service.state if active else ""
-        self.start_button.setEnabled(not active and not external)
+        # A viewer install never offers the button; runtime.Service refuses
+        # one anyway, before the radio.
+        self.start_button.setEnabled(not active and not external and not self.viewer)
+        self.start_button.setToolTip(VIEWER_REFUSAL if self.viewer else "")
         self.stop_button.setText('Stop qualification' if external else 'Stop recording')
         self.stop_button.setEnabled(active or (external and self.qualification_selected()))
         self.release_button.setEnabled(active and state != "released")
@@ -373,9 +396,31 @@ class Window(QMainWindow, Jobs):
             if callable(update):
                 update()
 
+    def own_session(self):
+        """Whether the session on screen is the one this window's recorder writes."""
+        session = self.snap.get("session") or {}
+        return bool(self.service and session) and getattr(self.service, "sid", None) == session.get("id")
+
     def background_recording(self):
-        return bool(self.snap.get('session',{}).get('status') == 'recording'
-                    and not (self.service and self.service.is_alive()))
+        """Whether another process is writing the session on screen.
+
+        Not a session that merely still says 'recording': a crash or a power
+        loss leaves that behind, and only the next writer to open the file
+        marks it interrupted (queries.writer_live).
+        """
+        if not self.snap or self.recording() or self.own_session():
+            return False
+        return writer_live(self.snap)
+
+    def unfinalized(self):
+        """A session left 'recording' by another process's writer that is gone.
+
+        Not this window's own: its recorder finalizes it on the way out, and
+        the snapshot after that says so.
+        """
+        session = self.snap.get("session") or {}
+        return (session.get("status") == "recording" and not self.recording()
+                and not self.own_session() and not self.background_recording())
 
     def qualification_selected(self):
         try:
@@ -399,13 +444,18 @@ class Window(QMainWindow, Jobs):
             dialog.exec()
             try: config = load_config(self.root/"config.json")
             except (FileNotFoundError,ValueError,TypeError): return
+        if config.role != "collector":
+            return self.show_error(VIEWER_REFUSAL)
         self.database = self.root/"recordings.sqlite"
         self.sid = None; self.follow = True; self.playing = False
         self.reset_chart_view(reset_scales=True)
         self.service = Service(config,self.database,notify=self.bridge.status.emit,
                                config_path=self.root/"config.json")
         self.service.start()
-        self.banner.setText("Starting a read-only local recording…")
+        # Read-only unless Allow control is on and a bridge relays a command
+        # (runtime.Service drains the queue the bridge writes).
+        self.banner.setText("Starting a local recording. It changes nothing on the battery "
+                            "unless Allow control is on and a bridge relays a command…")
         self.reload_device_summary()
         self.update_buttons()
 
@@ -443,6 +493,7 @@ class Window(QMainWindow, Jobs):
 
     def open_database(self, path):
         self.database = Path(path); self.sid = None; self.snap = {}
+        self.pages["incidents"].clear_selection()
         self.reset_chart_view(reset_scales=True)
         self.follow = True; self.playing = False; self.reload_sessions()
 
@@ -470,6 +521,8 @@ class Window(QMainWindow, Jobs):
 
     def select_session(self,index):
         self.sid = self.session_choice.itemData(index)
+        # An incident chosen in the session before is not one of this one's.
+        self.pages["incidents"].clear_selection()
         self.reset_chart_view(reset_scales=True)
         self.follow = True; self.cursor = None; self.refresh()
 
@@ -487,7 +540,45 @@ class Window(QMainWindow, Jobs):
             self.cursor = min(self.snap["latest"],(self.cursor or 0)+.75*10)
             if self.cursor >= self.snap["latest"]:
                 self.playing = False; self.play_button.setText("Play")
-        self.refresh()
+        # A session being written changes all the time, and its ages run on
+        # without new data. Any other is drawn again only when the view asks
+        # for something else -- or the last query failed, leaving that unshown
+        # -- or once a probe finds a writer has changed it: drawing a long
+        # recording holds this thread, and a saved one rarely changes.
+        if self.playing or self.following_writer() or self.shown != self.view_request():
+            self.refresh()
+        else:
+            self.probe()
+
+    def following_writer(self):
+        return self.recording() or self.background_recording()
+
+    def view_request(self):
+        # Whether a writer is followed is part of it: the view a writer's
+        # session gets changes when it stops, even if nothing else does.
+        return (self.database, self.sid, self.chart_revision, self.chart_request(),
+                self.following_writer())
+
+    def probe(self):
+        """Query the session on screen again once something has changed it.
+
+        Only a writer can: the recorder finishing it, a collector thinning or
+        pruning it, or an incident marked or removed from another process.
+        queries.revision() says so without reading a frame, off this thread.
+        """
+        if self.closing or self.loading or self.probing or not self.snap or not self.database:
+            return
+        path, sid, seen = self.database, self.snap["session"]["id"], self.snap.get("revision")
+        self.probing = True
+        def done(current):
+            self.probing = False
+            if current != seen and self.database == path and self.snap.get("revision") == seen:
+                self.refresh()
+        def failed(_message):
+            # The ordinary query says what is wrong with the recording.
+            self.probing = False
+            self.refresh()
+        self.job(lambda:session_revision(path,sid),done,failed)
 
     def refresh(self):
         if self.closing or self.loading or not self.database or not self.database.exists(): return
@@ -495,12 +586,15 @@ class Window(QMainWindow, Jobs):
         path,sid = self.database,self.sid
         request = self.chart_request()
         revision = self.chart_revision
+        view = self.view_request()
         cursor, span = request
         self.loading = True
         def done(snap):
             self.loading = False
             if self.database == path and self.sid == sid and revision == self.chart_revision:
                 self.render(snap)
+                if snap:
+                    self.shown = view
             else:
                 # A wheel/seek/preset change can arrive while a query is running.
                 # Never paint that old window over the user's newer selection.
@@ -536,7 +630,24 @@ class Window(QMainWindow, Jobs):
             elif self.background_recording():
                 self.set_badge('BACKGROUND RECORDER','accent')
                 self.banner.setText('Live view of the independent qualification recorder. Stop qualification releases Bluetooth; closing this viewer does not stop it.')
-        now_t = (time.monotonic_ns()-session["start_mono_ns"])/1e9 if active or self.background_recording() else snap["right"]
+            elif self.unfinalized():
+                quiet = span_text((time.time_ns()-snap["activity_utc_ns"])/1e9)
+                self.set_badge("INTERRUPTED","warn")
+                self.banner.setText(f"Saved session · never finalized: nothing has been written to it for {quiet}, "
+                                    "longer than a running recorder stays silent, so the recorder that wrote it "
+                                    "stopped without closing it (a crash or a power loss). The next recorder to "
+                                    f"open this file marks it interrupted · {snap['count']:,} received frames · "
+                                    f"{self.database.name}")
+        # Ages are measured to now while the session is still being written,
+        # and to the right edge of the view once it is saved. Only this
+        # process can read its own monotonic clock; another writer's session,
+        # possibly from an earlier boot, is timed by the wall clock instead.
+        if active and self.own_session():
+            now_t = (time.monotonic_ns()-session["start_mono_ns"])/1e9
+        elif self.background_recording():
+            now_t = elapsed_now(snap)
+        else:
+            now_t = snap["right"]
         # Named update_snapshot, not render: QWidget already defines render() and a
         # page without its own hook would silently call Qt's paint routine instead.
         for page in self.pages.values():
@@ -642,7 +753,21 @@ class Window(QMainWindow, Jobs):
                 with Store(path) as store: store.delete_incident(selected)
             self.job(remove,lambda _:self.refresh())
 
-    def export(self):
+    def export_session(self):
+        """Overview and Exported files: the whole session on screen.
+
+        Whatever is selected on the Incidents page, which may be hidden and may
+        not be the user's choice at all, plays no part in it.
+        """
+        self.export(None)
+
+    def export_incident(self):
+        """Incidents: the selected incident's window, and nothing without one."""
+        incident = self.selected_incident()
+        if incident is not None:
+            self.export(incident)
+
+    def export(self, incident):
         # Default into the folder the Exported files page lists, so a bundle the
         # viewer wrote is findable again without the user remembering where.
         default = self.root/"exports"
@@ -650,16 +775,17 @@ class Window(QMainWindow, Jobs):
             default.mkdir(parents=True, exist_ok=True)
         except OSError:
             default = self.root
-        parent = QFileDialog.getExistingDirectory(self,"Choose folder for a new evidence bundle",str(default))
+        scope = "the whole session" if incident is None else f"incident {incident}'s window"
+        parent = QFileDialog.getExistingDirectory(self,f"Choose folder for an evidence bundle of {scope}",str(default))
         if not parent: return
         from .exporting import export_evidence
         destination = Path(parent)/("OpenPowerstation-"+datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
-        path,sid,incident = self.database,self.sid,self.selected_incident()
-        self.banner.setText("Exporting sanitized numeric data and offline charts…")
+        path,sid = self.database,self.sid
+        self.banner.setText(f"Exporting sanitized numeric data and offline charts of {scope}…")
         def done(result):
             report,_ = result
             self.pages["exports"].reload()
-            self.show_error(f"Evidence saved:\n{report}\n\nIdentifiers, notes, and opaque payloads are excluded.\n"
+            self.show_error(f"Evidence of {scope} saved:\n{report}\n\nIdentifiers, notes, and opaque payloads are excluded.\n"
                             "Use the CLI --raw option only when you need a separate private raw archive.")
         self.job(lambda:export_evidence(path,destination,sid=sid,incident_id=incident),done)
 

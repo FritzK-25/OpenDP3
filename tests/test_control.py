@@ -3,8 +3,8 @@
 Control is the one place this application writes to the battery, so the tests
 that matter most are the ones asserting what it refuses.
 """
+import asyncio
 import json
-import os
 import time
 from types import SimpleNamespace
 
@@ -13,9 +13,11 @@ import pytest
 from openpowerstation.bridge import (CONTROL_FEEDBACK_FIELDS, CONTROL_QUEUE_MAX_FILES, CONTROLS, Bridge,
                             control_discovery, control_topic, discovery_payloads)
 from openpowerstation.config import Config
-from openpowerstation.protocol import (CONTROL_CMD_ID, CONTROL_FIELDS, CONTROL_HEADER, OutboundGate,
-                              PolicyError, auth_packet, control_packet)
-from openpowerstation.runtime import CONTROL_MAX_AGE, Service
+from openpowerstation.control_queue import SUPERSEDED, Request
+from openpowerstation.protocol import (CONTROL_CMD_ID, CONTROL_FIELDS, CONTROL_HEADER, Identity,
+                              OutboundGate, PolicyError, auth_packet, control_packet)
+from openpowerstation.runtime import CONTROL_MAX_AGE, Service, control_label
+from openpowerstation.storage import read_db
 from openpowerstation.vendor.packet import Packet
 from openpowerstation.vendor.pb import mr521_pb2
 
@@ -27,6 +29,46 @@ def make_config(**overrides):
                   mqtt_host="192.0.2.10")
     values.update(overrides)
     return Config(**values)
+
+
+def request(field, value, guarded=True, issued_utc_ns=None):
+    """A request file as the bridge writes it for the guarded payload, issued now."""
+    issued = time.time_ns() if issued_utc_ns is None else issued_utc_ns
+    return json.dumps({"key": field, "value": value, "issued_utc_ns": issued, "guarded": guarded})
+
+
+def deliver(bridge, key, payload):
+    """Exactly what Home Assistant's broker hands the bridge for one publish."""
+    bridge.on_message(None, None, SimpleNamespace(
+        topic=control_topic(bridge.dev_id, key), payload=payload, retain=False))
+
+
+def drained(service):
+    """What one drain queues, each executable request named as its events name it."""
+    service.drain_control_files()
+    queued = [service.commands.get_nowait() for _ in range(service.commands.qsize())]
+    return [(kind, control_label(detail.key, detail.value) if isinstance(detail, Request) else detail)
+            for kind, detail in queued]
+
+
+def execute(service, request):
+    """Run one drained request through the collector's execution step.
+
+    Control is on and a session is attached, so anything that refuses the
+    request is the check under test. Returns what was sent and recorded.
+    """
+    sent, events = [], []
+
+    class Session:
+        gate = SimpleNamespace(allow_control=False)
+
+        async def send_control(self, field, value):
+            sent.append((field, value))
+
+    service.session = Session()
+    recorder = SimpleNamespace(event=lambda kind, detail: events.append((kind, detail)))
+    asyncio.run(service.execute_control(recorder, request))
+    return sent, events
 
 
 def raw_packet(payload, cmd_id=CONTROL_CMD_ID):
@@ -174,25 +216,40 @@ def test_service_turns_request_files_into_commands(tmp_path):
     service = Service(make_config(allow_control=True), tmp_path / "recordings.sqlite")
     service.control_dir.mkdir(parents=True)
     (service.control_dir / "1-a.json").write_text(
-        json.dumps({"field": "cfg_hv_ac_out_open", "value": True}), encoding="utf-8")
+        request("cfg_hv_ac_out_open", True), encoding="utf-8")
     (service.control_dir / "2-b.json").write_text(
-        json.dumps({"field": "cfg_lv_ac_out_open", "value": False}), encoding="utf-8")
-    service.drain_control_files()
-    assert [service.commands.get_nowait() for _ in range(2)] == [
+        request("cfg_lv_ac_out_open", False), encoding="utf-8")
+    assert drained(service) == [
         ("control", "cfg_hv_ac_out_open=on"), ("control", "cfg_lv_ac_out_open=off")]
     # Consumed, so a restart cannot replay a stale output command.
     assert list(service.control_dir.glob("*.json")) == []
 
 
-@pytest.mark.parametrize("body", ['{"field": "cfg_hv_ac_out_open"}',
-                                  '{"field": 5, "value": true}',
-                                  '{"field": "cfg_hv_ac_out_open", "value": "yes"}',
+@pytest.mark.parametrize("marker", ["absent", False, "true", 1, None])
+def test_service_refuses_a_request_file_not_marked_guarded(tmp_path, marker):
+    """The collector is what holds the radio, so it enforces the guard as well.
+    A request from any writer that did not explicitly mark it guarded -- an
+    older bridge, a hand-made file, a truthy look-alike -- is only ever refused."""
+    service = Service(make_config(allow_control=True), tmp_path / "recordings.sqlite")
+    service.control_dir.mkdir(parents=True)
+    body = {"key": "cfg_lv_ac_out_open", "value": False, "issued_utc_ns": time.time_ns()}
+    if marker != "absent":
+        body["guarded"] = marker
+    (service.control_dir / "1-a.json").write_text(json.dumps(body), encoding="utf-8")
+    assert drained(service) == [("control_unguarded", "cfg_lv_ac_out_open=off")]
+    assert list(service.control_dir.glob("*.json")) == []
+
+
+@pytest.mark.parametrize("body", ['{"key": "cfg_hv_ac_out_open", "issued_utc_ns": ISSUED}',
+                                  '{"key": 5, "value": true, "issued_utc_ns": ISSUED}',
+                                  '{"key": "cfg_hv_ac_out_open", "value": "yes", "issued_utc_ns": ISSUED}',
                                   '["cfg_hv_ac_out_open", true]',
                                   'not json at all'])
 def test_service_drops_malformed_request_files(tmp_path, body):
     service = Service(make_config(allow_control=True), tmp_path / "recordings.sqlite")
     service.control_dir.mkdir(parents=True)
-    (service.control_dir / "1-a.json").write_text(body, encoding="utf-8")
+    (service.control_dir / "1-a.json").write_text(body.replace("ISSUED", str(time.time_ns())),
+                                                  encoding="utf-8")
     service.drain_control_files()
     assert service.commands.empty()
     assert list(service.control_dir.glob("*.json")) == []
@@ -203,9 +260,8 @@ def test_service_drains_even_while_control_is_off(tmp_path):
     service = Service(make_config(allow_control=False), tmp_path / "recordings.sqlite")
     service.control_dir.mkdir(parents=True)
     (service.control_dir / "1-a.json").write_text(
-        json.dumps({"field": "cfg_lv_ac_out_open", "value": True}), encoding="utf-8")
-    service.drain_control_files()
-    assert service.commands.get_nowait() == ("control", "cfg_lv_ac_out_open=on")
+        request("cfg_lv_ac_out_open", True), encoding="utf-8")
+    assert drained(service) == [("control", "cfg_lv_ac_out_open=on")]
     assert list(service.control_dir.glob("*.json")) == []
 
 
@@ -213,13 +269,18 @@ def test_service_expires_a_request_that_waited_too_long(tmp_path):
     """A switch must not obey a press the operator made minutes ago."""
     service = Service(make_config(allow_control=True), tmp_path / "recordings.sqlite")
     service.control_dir.mkdir(parents=True)
-    stale = service.control_dir / "1-a.json"
-    stale.write_text(json.dumps({"field": "cfg_lv_ac_out_open", "value": True}), encoding="utf-8")
-    old = time.time() - (CONTROL_MAX_AGE + 5)
-    os.utime(stale, (old, old))
+    old = time.time_ns() - int((CONTROL_MAX_AGE + 5) * 1e9)
+    (service.control_dir / "1-a.json").write_text(
+        request("cfg_lv_ac_out_open", True, issued_utc_ns=old), encoding="utf-8")
     service.drain_control_files()
-    assert service.commands.get_nowait() == ("control_expired", "cfg_lv_ac_out_open=on")
+    kind, stale = service.commands.get_nowait()
+    assert kind == "control"
     assert list(service.control_dir.glob("*.json")) == []
+    # Decided as it is about to run, where the radio is.
+    sent, events = execute(service, stale)
+    assert sent == []
+    assert events == [("control_refused",
+                       "cfg_lv_ac_out_open=on: request expired before it could be sent.")]
 
 
 def test_service_ignores_partly_written_requests(tmp_path):
@@ -284,10 +345,91 @@ def test_bridge_writes_a_command_file_the_service_can_read(tmp_path):
     database = tmp_path / "recordings.sqlite"
     bridge = Bridge(make_config(allow_control=True), database, client=None)
     bridge.on_message(None, None, SimpleNamespace(
-        topic=control_topic(bridge.dev_id, "cfg_hv_ac_out_open"), payload=b"ON"))
+        topic=control_topic(bridge.dev_id, "cfg_hv_ac_out_open"), payload=b"GUARDED_ON"))
     service = Service(make_config(allow_control=True), database)
-    service.drain_control_files()
-    assert service.commands.get_nowait() == ("control", "cfg_hv_ac_out_open=on")
+    assert drained(service) == [("control", "cfg_hv_ac_out_open=on")]
+
+
+@pytest.mark.parametrize("key", sorted(CONTROL_FIELDS))
+@pytest.mark.parametrize("payload", [b"ON", b"OFF", b"on", b" off "])
+def test_a_bare_switch_press_never_becomes_an_output_command(tmp_path, key, payload):
+    """The discovered switch sends payload_on/payload_off, from the device page,
+    a more-info dialog, Developer tools or any automation. None of those went
+    through the arm-then-change interlock, and LV off removes power from the host
+    running Home Assistant, so a bare ON/OFF is handed over only to be refused."""
+    database = tmp_path / "recordings.sqlite"
+    bridge = Bridge(make_config(allow_control=True), database, client=None)
+    deliver(bridge, key, payload)
+    state = payload.strip().decode().lower()
+    assert drained(Service(make_config(allow_control=True), database)) == [
+        ("control_unguarded", f"{key}={state}")]
+
+
+@pytest.mark.parametrize("key", sorted(CONTROL_FIELDS))
+@pytest.mark.parametrize("payload,state", [(b"GUARDED_ON", "on"), (b"GUARDED_OFF", "off")])
+def test_the_guarded_payload_is_what_changes_an_output(tmp_path, key, payload, state):
+    """Published by the guard script only after it has consumed its one-shot arm."""
+    database = tmp_path / "recordings.sqlite"
+    bridge = Bridge(make_config(allow_control=True), database, client=None)
+    deliver(bridge, key, payload)
+    assert drained(Service(make_config(allow_control=True), database)) == [
+        ("control", f"{key}={state}")]
+
+
+def test_collector_records_an_unguarded_press_and_never_sends_it(tmp_path, monkeypatch):
+    """End to end through a running collector: the refusal is written by the
+    same process that writes every other control event, and the radio sees
+    only the guarded command."""
+    config = make_config(allow_control=True)
+    sent = []
+
+    async def scan(*_):
+        return [(Identity(config.address, config.serial, 0, 0x13), object())]
+
+    class Session:
+        def __init__(self, identity, device, uid, on_frame, on_event, allow_control=False):
+            self.on_event = on_event
+            self.gate = SimpleNamespace(allow_control=allow_control)
+
+        async def run(self):
+            self.on_event("connected", "test", time.time_ns(), time.monotonic_ns())
+            await asyncio.Event().wait()
+
+        async def send_control(self, field, value):
+            sent.append((field, value))
+
+    def events(kind):
+        with read_db(database) as db:
+            return [row[0] for row in db.execute(
+                "SELECT detail FROM events WHERE kind=? ORDER BY id", (kind,))]
+
+    def wait_for(predicate, timeout=4):
+        deadline = time.monotonic() + timeout
+        while not predicate():
+            assert time.monotonic() < deadline, "Timed out"
+            time.sleep(.02)
+
+    monkeypatch.setattr("openpowerstation.runtime.ble.scan", scan)
+    monkeypatch.setattr("openpowerstation.runtime.ble.Session", Session)
+    database = tmp_path / "recordings.sqlite"
+    bridge = Bridge(config, database, client=None)
+    service = Service(config, database, lock_dir=tmp_path / "locks")
+    service.start()
+    try:
+        wait_for(lambda: service.state == "recording")
+        deliver(bridge, "cfg_lv_ac_out_open", b"OFF")
+        wait_for(lambda: events("control_refused"))
+        deliver(bridge, "cfg_lv_ac_out_open", b"GUARDED_OFF")
+        wait_for(lambda: events("control"))
+    finally:
+        service.stop()
+        service.join(5)
+    assert not service.error
+    assert sent == [("cfg_lv_ac_out_open", False)]
+    [refusal] = events("control_refused")
+    assert refusal.startswith("cfg_lv_ac_out_open=off: ")
+    assert "guard" in refusal
+    assert events("control") == ["Sent cfg_lv_ac_out_open=off."]
 
 
 def test_bridge_control_queue_is_bounded_without_collector(tmp_path, monkeypatch):
@@ -300,7 +442,7 @@ def test_bridge_control_queue_is_bounded_without_collector(tmp_path, monkeypatch
 
     for index in range(total):
         key = "cfg_hv_ac_out_open" if index % 2 == 0 else "cfg_lv_ac_out_open"
-        bridge.queue_control(key, "ON" if index == total - 1 else "OFF")
+        bridge.queue_control(key, "GUARDED_ON" if index == total - 1 else "GUARDED_OFF")
 
     queued = sorted((tmp_path / "commands").glob("*.json"))
     assert len(queued) == CONTROL_QUEUE_MAX_FILES
@@ -314,21 +456,34 @@ def test_bounded_queue_still_delivers_a_fresh_surviving_command(tmp_path, monkey
     database = tmp_path / "recordings.sqlite"
     bridge = Bridge(make_config(allow_control=True), database, client=None)
     total = CONTROL_QUEUE_MAX_FILES + 3
-    ticks = iter(10**18 + index for index in range(total))
+    start = time.time_ns()
+    ticks = iter(start + index for index in range(total))
     monkeypatch.setattr("openpowerstation.bridge.time.time_ns", lambda: next(ticks))
     for index in range(total):
-        bridge.queue_control("cfg_hv_ac_out_open", "ON" if index == total - 1 else "OFF")
+        bridge.queue_control("cfg_hv_ac_out_open",
+                             "GUARDED_ON" if index == total - 1 else "GUARDED_OFF")
+    monkeypatch.undo()
 
     service = Service(make_config(allow_control=True), database)
     service.drain_control_files()
-    commands = [service.commands.get_nowait() for _ in range(CONTROL_QUEUE_MAX_FILES)]
-    assert commands[-1] == ("control", "cfg_hv_ac_out_open=on")
+    commands = [service.commands.get_nowait() for _ in range(service.commands.qsize())]
+    assert len(commands) == CONTROL_QUEUE_MAX_FILES
+    # The presses it replaced are each recorded, not replayed as toggles.
+    assert commands[:-1] == [("control_refused", f"cfg_hv_ac_out_open=off: {SUPERSEDED}.")] * (
+        CONTROL_QUEUE_MAX_FILES - 1)
+    kind, survivor = commands[-1]
+    assert kind == "control"
     assert list(service.control_dir.glob("*.json")) == []
+    assert execute(service, survivor) == ([("cfg_hv_ac_out_open", True)],
+                                          [("control", "Sent cfg_hv_ac_out_open=on.")])
 
 
 @pytest.mark.parametrize("topic_key,payload", [("cfg_power_off", b"ON"),
+                                               ("cfg_power_off", b"GUARDED_ON"),
                                                ("cfg_usb_open", b"ON"),
                                                ("cfg_hv_ac_out_open", b"MAYBE"),
+                                               ("cfg_hv_ac_out_open", b"guarded_on"),
+                                               ("cfg_hv_ac_out_open", b"GUARDED_TOGGLE"),
                                                ("cfg_hv_ac_out_open", b"")])
 def test_bridge_refuses_to_queue_unapproved_commands(tmp_path, topic_key, payload):
     database = tmp_path / "recordings.sqlite"
@@ -341,9 +496,19 @@ def test_bridge_refuses_to_queue_unapproved_commands(tmp_path, topic_key, payloa
 def test_bridge_ignores_commands_entirely_while_control_is_off(tmp_path):
     database = tmp_path / "recordings.sqlite"
     bridge = Bridge(make_config(allow_control=False), database, client=None)
-    bridge.on_message(None, None, SimpleNamespace(
-        topic=control_topic(bridge.dev_id, "cfg_hv_ac_out_open"), payload=b"ON"))
+    for payload in (b"ON", b"GUARDED_ON"):
+        bridge.on_message(None, None, SimpleNamespace(
+            topic=control_topic(bridge.dev_id, "cfg_hv_ac_out_open"), payload=payload))
     assert not (tmp_path / "commands").exists()
+
+
+def test_no_discovered_switch_can_send_a_guarded_payload():
+    """The guard holds only while the switch entity itself cannot emit it."""
+    from openpowerstation.bridge import GUARDED_PAYLOADS
+    assert set(GUARDED_PAYLOADS) == {"GUARDED_ON", "GUARDED_OFF"}
+    for payload in control_discovery("abc", {}, {}).values():
+        sent = {payload["payload_on"].upper(), payload["payload_off"].upper()}
+        assert sent.isdisjoint(GUARDED_PAYLOADS)
 
 
 def test_bridge_relay_matches_the_protocol_allowlist_exactly():

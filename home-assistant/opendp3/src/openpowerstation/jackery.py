@@ -5,6 +5,7 @@ different GATT layout and advertises enough material to derive the session key,
 but discovery is the safe first step: it does not connect or write anything.
 """
 from dataclasses import dataclass, replace
+import contextlib
 import asyncio
 import base64
 from datetime import datetime
@@ -24,6 +25,10 @@ DATA_WRITE_UUID = "0000ee01-0000-1000-8000-00805f9b34fb"
 DATA_NOTIFY_UUID = "0000ee02-0000-1000-8000-00805f9b34fb"
 GATT_OPERATION_TIMEOUT = 8.0
 GATT_CLOSE_TIMEOUT = 5.0
+# Bleak's own connect deadline, stated rather than inherited so the shared
+# adapter lease, which is held across the connect, can be sized against it
+# (radio.RADIO_HOLD_LIMIT). It is Bleak 3's default.
+CONNECT_TIMEOUT = 30.0
 
 
 def _operation_failure(backend: str, operation: str, exc: BaseException) -> str:
@@ -33,22 +38,44 @@ def _operation_failure(backend: str, operation: str, exc: BaseException) -> str:
     return f"backend={backend}; operation={operation}; exception={type(exc).__name__}{suffix}"
 
 
-async def _bounded_operation(awaitable, *, backend: str, operation: str, timeout: float):
+async def _bounded_operation(awaitable, *, backend: str, operation: str, timeout: float | None):
+    """Run one backend call so any failure arrives as TimeoutError or ConnectionError.
+
+    Bleak raises its own exception family (BleakDBusError and the rest), which
+    is neither of those, so an unwrapped call ended the collector process
+    instead of reaching its reattach path. ``timeout=None`` adds no deadline of
+    ours: the backend's own -- Bleak's 30-second connect, say -- still governs,
+    and only the classification applies.
+    """
     try:
         return await asyncio.wait_for(awaitable, timeout)
     except asyncio.CancelledError:
         raise
     except asyncio.TimeoutError as exc:
-        raise TimeoutError(
-            f"{_operation_failure(backend, operation, exc)}; timeout={timeout:g}s"
-        ) from exc
+        limit = "" if timeout is None else f"; timeout={timeout:g}s"
+        raise TimeoutError(f"{_operation_failure(backend, operation, exc)}{limit}") from exc
     except Exception as exc:
         raise ConnectionError(_operation_failure(backend, operation, exc)) from exc
+
+
+class StationSilent(TimeoutError):
+    """The Explorer left a status query unanswered on a link that raised nothing.
+
+    Distinct from a write that failed or ran out its deadline: that is the link
+    failing, while this is the station staying quiet for one poll, which is not
+    by itself a reason to give up a session that took an advertising window to
+    open.
+    """
+
+
+class StationNotFound(TimeoutError):
+    """No advertisement from the wanted Explorer arrived before the deadline."""
 
 # These are the only Jackery controls exposed by OpenPowerstation.  The portable
 # protocol has many more action IDs, including Wi-Fi and battery-boundary
 # writes; keeping this map deliberately small prevents a broker message from
-# becoming an arbitrary encrypted command.
+# becoming an arbitrary encrypted command. The write site checks every command
+# against it again (check_outbound), so a new caller cannot go around it.
 #
 # Screen timeout is unusual: the command writes minutes to `slt`, while status
 # reports a preset enum in `sltb` (1=no timeout, 2=2 minutes, 3=2 hours).  Keep
@@ -283,6 +310,60 @@ def _command(action: int, message_type: int, body: str = "") -> str:
     encoded = body.encode().hex()
     return f"DFEC00{action:02X}{message_type:02X}{len(encoded) // 2:02X}{encoded}"
 
+
+# The property query, the one command a poll sends.
+STATUS_COMMAND = _command(0xFC, 0x03)
+_TIME_SYNC_HEADER = _command(0x0F, 0x08)[:10]
+
+
+def time_sync_command(ts: int, utc_offset: int) -> str:
+    """The clock sync the station needs before it answers a property query."""
+    return _command(0x0F, 0x08, json.dumps({"ts": ts, "uo": utc_offset}, separators=(",", ":")))
+
+
+# Every control command the allowlist can build, and so the only ones a grant
+# from send_control can carry to the radio.
+_CONTROL_COMMANDS = frozenset(
+    jackery_control_command(control, value)
+    for control, spec in JACKERY_CONTROLS.items()
+    for value in ((True, False) if spec["kind"] == "switch" else spec["values"])
+)
+
+
+def check_outbound(command, control_grant: str | None = None) -> None:
+    """Refuse any Jackery write but the status query, a clock sync, or a granted control.
+
+    The Jackery counterpart of the DP3's OutboundGate, and like it this checks
+    what is about to be written rather than trusting the caller that built it.
+    It accepts exactly three shapes:
+
+    * the status query, with no body;
+    * a clock sync whose body is ``{"ts":<int>,"uo":<int>}`` and nothing else,
+      byte for byte as ``time_sync_command`` spells it;
+    * a control command, only when it is the one ``control_grant`` names and
+      only when the allowlist itself builds it.
+
+    Anything else raises PermissionError, naming no payload bytes.
+    """
+    if not isinstance(command, str):
+        raise PermissionError("Jackery outbound gate: only a plaintext command may be written.")
+    if command == STATUS_COMMAND:
+        return
+    if command.startswith(_TIME_SYNC_HEADER):
+        try:
+            body = json.loads(bytes.fromhex(command[12:]).decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            body = None
+        if (isinstance(body, dict) and set(body) == {"ts", "uo"}
+                and type(body["ts"]) is int and type(body["uo"]) is int
+                and command == time_sync_command(body["ts"], body["uo"])):
+            return
+        raise PermissionError("Jackery outbound gate: unexpected clock-sync body blocked.")
+    if control_grant is not None and command == control_grant and command in _CONTROL_COMMANDS:
+        return
+    raise PermissionError("Jackery outbound gate: command outside the allowlist blocked.")
+
+
 def _winrt_address_type(device) -> str | None:
     """Preserve the public/random address type that Bleak 3 drops at connect.
 
@@ -359,18 +440,19 @@ async def _run_query_sequence(write, ready: asyncio.Event,
     """Run the app's connection sequence once per candidate session key.
 
     The station expects an encrypted time sync after notification setup and
-    before it answers a property query.  Returns the key that produced a
-    decodable notification, or ``None`` if the station stayed silent for all
-    of them.
+    before it answers a property query.  ``write(command, key, label)`` takes
+    the plaintext command and the candidate key to encrypt it with.  Returns
+    the key that produced a decodable notification, or ``None`` if the station
+    stayed silent for all of them.
     """
     utc_offset = datetime.now().astimezone().utcoffset()
     offset = int(utc_offset.total_seconds()) if utc_offset else 0
-    sync_body = json.dumps({"ts": int(time.time()), "uo": offset}, separators=(",", ":"))
+    sync = time_sync_command(int(time.time()), offset)
     for key in keys:
         await asyncio.sleep(.1)
-        await write(_rc4_frame(_command(0x0F, 0x08, sync_body), key), "time-sync")
+        await write(sync, key, "time-sync")
         await asyncio.sleep(.1)
-        await write(_rc4_frame(_command(0xFC, 0x03), key), "status")
+        await write(STATUS_COMMAND, key, "status")
         try:
             await asyncio.wait_for(ready.wait(), timeout)
         except asyncio.TimeoutError:
@@ -398,6 +480,10 @@ class LocalReader:
         self.identity = identity
         self.keys = _session_keys(identity.encryption_key)
         self.allow_control = bool(allow_control)
+        # The one control command the write site may pass next. Only
+        # send_control sets it, after spending allow_control, and the write
+        # site clears it before anything else.
+        self._control_grant: str | None = None
         # Set once the station answers, so later polls skip the candidate sweep.
         self.key: bytes | None = None
         self.assembler = _ResponseAssembler(self.keys)
@@ -425,8 +511,8 @@ class LocalReader:
     def _backend_name(self) -> str:
         return "WinRT" if self._write_char is not None else f"Bleak/{sys.platform}"
 
-    def _silence_detail(self, operation: str, message: str) -> str:
-        return (
+    def _silence(self, operation: str, message: str) -> StationSilent:
+        return StationSilent(
             f"backend={self._backend_name()}; operation={operation}; "
             f"exception=TimeoutError; transport_error=none_observed; {message}"
         )
@@ -449,14 +535,12 @@ class LocalReader:
         self.notification_count = 0
         self.ready.clear()
         if self.key is None:
-            async def write_with_deadline(payload, label):
-                await self._write(payload, label, timeout=timeout)
+            async def write_with_deadline(command, key, label):
+                await self._write(command, label, key=key, timeout=timeout)
 
             self.key = await _run_query_sequence(write_with_deadline, self.ready, self.keys, timeout)
         else:
-            await self._write(
-                _rc4_frame(_command(0xFC, 0x03), self.key), "status", timeout=timeout
-            )
+            await self._write(STATUS_COMMAND, "status", timeout=timeout)
             try:
                 await asyncio.wait_for(self.ready.wait(), timeout)
                 await asyncio.sleep(.35)
@@ -464,20 +548,20 @@ class LocalReader:
                 pass
         if not self.responses:
             if self.notification_count:
-                raise TimeoutError(self._silence_detail(
+                raise self._silence(
                     "notification_decode",
                     f"Jackery sent {self.notification_count} GATT notification(s), but none decoded as status.",
-                ))
+                )
             if self.key is None:
-                raise TimeoutError(self._silence_detail(
+                raise self._silence(
                     "notification_wait",
                     "Jackery accepted the local GATT connection but sent no notification for any "
                     f"of the {len(self.keys)} candidate session key(s).",
-                ))
-            raise TimeoutError(self._silence_detail(
+                )
+            raise self._silence(
                 "notification_wait",
                 "Jackery stopped answering property queries on an open GATT session.",
-            ))
+            )
         merged = {}
         for response in self.responses:
             merged.update(response)
@@ -494,6 +578,10 @@ class LocalReader:
         for these portable commands, so callers must follow this with a status
         read and compare the returned raw property before treating the action
         as confirmed.
+
+        The write site checks the command again (check_outbound): it passes a
+        control only as the grant set here names it, so a write of a control
+        body from anywhere else is refused.
         """
         if not self.allow_control:
             raise PermissionError("Jackery control is turned off.")
@@ -501,7 +589,9 @@ class LocalReader:
         if self.key is None:
             raise ConnectionError("Jackery control requires an authenticated status session.")
         command = jackery_control_command(control, value)
-        await self._write(_rc4_frame(command, self.key), f"control {control}")
+        # Nothing awaits between this and the write site taking it back.
+        self._control_grant = command
+        await self._write(command, f"control {control}")
 
     async def close(self) -> list[str]:
         diagnostics = []
@@ -533,12 +623,18 @@ class LocalReader:
         client = BleakClient(
             self.identity.device or self.identity.address,
             winrt=winrt,
+            timeout=CONNECT_TIMEOUT,
             **bleak_adapter_kwargs(),
         )
-        await client.connect()
+        backend = f"Bleak/{sys.platform}"
+        # Classified, not bounded here: Bleak's own deadline, CONNECT_TIMEOUT, governs.
+        await _bounded_operation(client.connect(), backend=backend,
+                                 operation="connect", timeout=None)
         self._bleak = client
-        await client.start_notify(DATA_NOTIFY_UUID,
-                                  lambda _, data: self._consume(bytes(data)))
+        await _bounded_operation(
+            client.start_notify(DATA_NOTIFY_UUID, lambda _, data: self._consume(bytes(data))),
+            backend=backend, operation="start_notify", timeout=None,
+        )
 
     async def _open_winrt(self) -> None:
         """Attach with native WinRT, bypassing Bleak's services-changed loop."""
@@ -633,7 +729,21 @@ class LocalReader:
         self._device = None
         return diagnostics
 
-    async def _write(self, payload: bytes, label: str, *, timeout: float | None = None) -> None:
+    async def _write(self, command: str, label: str, *, key: bytes | None = None,
+                     timeout: float | None = None) -> None:
+        """The only Jackery GATT write site. Every command passes check_outbound here.
+
+        It takes the plaintext command and encrypts it itself, with the session
+        key or the candidate ``key`` a new session is trying, so no caller can
+        hand it bytes the gate never read. The control grant is taken before
+        anything else and is good for this one write whatever it carries.
+        """
+        grant, self._control_grant = self._control_grant, None
+        check_outbound(command, grant)
+        key = self.key if key is None else key
+        if key is None:
+            raise ConnectionError("Jackery write requires a session key.")
+        payload = _rc4_frame(command, key)
         deadline = GATT_OPERATION_TIMEOUT if timeout is None else timeout
         if self._bleak is not None:
             await _bounded_operation(
@@ -661,26 +771,31 @@ class LocalReader:
             raise ConnectionError(f"Jackery {label} write failed with status {int(result.status)}.")
 
 
-async def read_status(identity: Identity, timeout: float = 8) -> dict:
-    """Connect once, issue only the portable status query, and disconnect."""
-    async with LocalReader(identity) as reader:
-        return await reader.read(timeout)
-
-
-async def discover_reader(timeout: float = 30, serial: str | None = None) -> LocalReader:
+async def discover_reader(timeout: float = 30, *, serial: str | None = None,
+                          lease=None) -> LocalReader:
     """Discover an Explorer and open a session while its advertisement is live.
-
-    With ``serial``, advertisements from any other Explorer are ignored, so a
-    neighbouring unit is never attached to (taking its single BLE client slot)
-    only to be rejected afterwards.
 
     The Explorer's connectable advertising window can end as soon as an attach
     is attempted.  On WinRT, stopping the watcher before opening GATT can also
     leave the just-returned ``BLEDevice`` unusable (``E_FAIL``).  Keep discovery
     running until the session is open or the attempt has failed.
+
+    With ``serial``, every other Explorer is ignored before anything connects:
+    the station accepts one BLE client, so opening a neighbour's only to reject
+    it afterwards occupies that station's slot and costs this one its window.
+    Either an open reader is returned, or an exception is raised with nothing
+    left open.
+
+    ``lease``, the shared adapter lease, is entered only once the wanted
+    advertisement has arrived and held only while the session opens. The search
+    can run for the whole ``timeout``, and the Explorer may not advertise for
+    hours, so holding the lease through it kept the other collector from
+    recovering for as long as this station was away.
     """
     loop = asyncio.get_running_loop()
     ready = loop.create_future()
+    ignored = set()
+    backend = f"Bleak/{sys.platform}"
 
     def callback(device, advertisement):
         if ready.done():
@@ -694,9 +809,10 @@ async def discover_reader(timeout: float = 30, serial: str | None = None) -> Loc
         # non-connectable.  The AEP-id/FromIdAsync fallback below is deliberately
         # meant to bypass that lookup, so let it qualify the decoded Explorer
         # instead of filtering the packet before the fallback can run.
-        if serial is not None and (parsed is None or parsed.serial != serial):
-            return
         if parsed and parsed.model_code == 8 and parsed.encryption_key:
+            if serial is not None and parsed.serial != serial:
+                ignored.add(device.address)
+                return
             ready.set_result(Identity(device.address.upper(), device.name or "",
                                       parsed.serial, parsed.model_code,
                                       parsed.battery_level, advertisement.rssi,
@@ -705,21 +821,40 @@ async def discover_reader(timeout: float = 30, serial: str | None = None) -> Loc
 
     scanner = BleakScanner(detection_callback=callback, **bleak_adapter_kwargs())
     scanning = False
-    await scanner.start()
+    reader = None
+    await _bounded_operation(scanner.start(), backend=backend, operation="scan_start", timeout=None)
     scanning = True
     try:
-        identity = await asyncio.wait_for(ready, timeout)
+        try:
+            identity = await asyncio.wait_for(ready, timeout)
+        except asyncio.TimeoutError:
+            wanted = f"Jackery {serial}" if serial else "an Explorer 1000 v2"
+            others = f"; ignored {len(ignored)} other Explorer(s)" if ignored else ""
+            raise StationNotFound(
+                f"No usable advertisement from {wanted} within {timeout:g}s{others}."
+            ) from None
         device_id = await _winrt_device_id(identity.address, identity.address_type)
         if device_id:
             identity = replace(identity, device_id=device_id)
             # FromIdAsync no longer relies on the live watcher. Stopping it
             # avoids a WinRT services-changed loop during GATT discovery.
-            await scanner.stop()
+            await _bounded_operation(scanner.stop(), backend=backend,
+                                     operation="scan_stop", timeout=None)
             scanning = False
-        return await LocalReader(identity).open()
+        async with lease or contextlib.nullcontext():
+            reader = await LocalReader(identity).open()
     finally:
         if scanning:
-            await scanner.stop()
+            try:
+                await _bounded_operation(scanner.stop(), backend=backend,
+                                         operation="scan_stop", timeout=None)
+            except BaseException:
+                # Raising past an open session would strand the station's only
+                # client slot with nothing left holding it.
+                if reader is not None:
+                    await reader.close()
+                raise
+    return reader
 
 
 async def discover_and_read_status(timeout: float = 30) -> dict:

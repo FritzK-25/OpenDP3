@@ -17,6 +17,12 @@ from . import dpapi
 # know this key exists. See docs/SECURITY.md, "Credentials, memory and
 # Windows folders".
 _MQTT_PASSWORD_DPAPI_KEY = "mqtt_password_dpapi"
+# The same for user_id. With the serial the DP3 advertises to anyone in range,
+# the user ID is its whole Bluetooth login proof (ble.py), the more valuable of
+# the two. Every config needs one, so it is protected only where DPAPI exists;
+# elsewhere config.json is readable by its owner alone (mode 600).
+_USER_ID_DPAPI_KEY = "user_id_dpapi"
+_DPAPI_AVAILABLE = os.name == "nt"
 
 # The platform data directory was named after the project's old name. An
 # install that already has one keeps using it, so its setup, recordings and
@@ -31,6 +37,15 @@ def data_dir() -> Path:
     if not current.exists() and legacy.is_dir():
         return legacy
     return current
+
+class ConfigError(ValueError):
+    """An unusable configuration, described by one fixed message.
+
+    The broker password lives in this configuration, so every message is a
+    constant string that quotes no value. That makes str(error) safe to show:
+    the HAOS app's start-up log prints it to name the cause of a failed start.
+    scripts/test_opendp3_app.py rejects a ConfigError built any other way.
+    """
 
 @dataclass
 class Config:
@@ -54,37 +69,56 @@ class Config:
     # is false the outbound gate rejects every control packet, so the recorder
     # keeps the read-only behaviour every earlier release guaranteed.
     allow_control: bool = False
+    # The Explorer this install records and publishes, by its 15-digit serial;
+    # empty names none. start_all.py and its watchdog read it here. The CLI's
+    # Jackery commands take theirs from --serial, which the HAOS app fills in
+    # from its own jackery_serial option. No serial is built into the code.
+    jackery_serial: str = ""
+    # Whether this install may hold the batteries at all: "collector", or
+    # "viewer" for one that only reads recordings. Each battery accepts a single
+    # Bluetooth connection, so a desktop kept for viewing must never take it
+    # from the machine that owns it -- in production the Raspberry Pi. A viewer
+    # opens no Bluetooth link to either battery and publishes neither (see
+    # install_role). Absent from configs written before it existed, which stay
+    # collectors; the HAOS app always is one.
+    role: str = "collector"
 
     def validate(self):
+        # Checked apart from the DP3 fields below.
+        if self.role not in ROLES:
+            raise ValueError("Install role must be collector or viewer.")
+        if self.jackery_serial != "" and not (isinstance(self.jackery_serial, str)
+                                             and re.fullmatch(r"[0-9]{15}", self.jackery_serial)):
+            raise ValueError("Jackery serial must be 15 digits.")
         if any(not isinstance(getattr(self, name), str) for name in
                ("address", "serial", "user_id", "region", "firmware", "conditions",
                 "mqtt_host", "mqtt_username", "mqtt_password")):
-            raise ValueError("Invalid configuration field type. Run local setup again.")
+            raise ConfigError("Invalid configuration field type. Run local setup again.")
         if not re.fullmatch(r"[0-9A-Fa-f]{2}(?::[0-9A-Fa-f]{2}){5}", self.address):
-            raise ValueError("Select a Bluetooth device address from scan.")
+            raise ConfigError("Select a Bluetooth device address from scan.")
         if not re.fullmatch(r"MR(?:51|54)[A-Za-z0-9]{12}", self.serial):
-            raise ValueError("Only DELTA Pro 3 serial prefixes MR51/MR54 are supported.")
+            raise ConfigError("Only DELTA Pro 3 serial prefixes MR51/MR54 are supported.")
         if not self.user_id.isascii() or not self.user_id.isdecimal():
-            raise ValueError("User ID must contain only ASCII digits.")
+            raise ConfigError("User ID must contain only ASCII digits.")
         if self.region not in {"US", "EU", "JP", "ASIA"}:
-            raise ValueError("Unsupported login region.")
+            raise ConfigError("Unsupported login region.")
         if any(type(value) not in (int, float) or (isinstance(value, float) and not math.isfinite(value))
                for value in (self.temperature_jump, self.temperature_window)):
-            raise ValueError("Temperature anomaly settings must be finite numbers.")
+            raise ConfigError("Temperature anomaly settings must be finite numbers.")
         if not 0 < self.temperature_jump <= 100 or not 0 < self.temperature_window <= 60:
-            raise ValueError("Invalid temperature anomaly settings.")
+            raise ConfigError("Invalid temperature anomaly settings.")
         # Bridge settings. No message may quote a value: the broker password is here.
         if type(self.mqtt_port) is not int or not 1 <= self.mqtt_port <= 65535:
-            raise ValueError("MQTT port must be between 1 and 65535.")
+            raise ConfigError("MQTT port must be between 1 and 65535.")
         if type(self.mqtt_tls) is not bool:
-            raise ValueError("MQTT TLS setting must be true or false.")
+            raise ConfigError("MQTT TLS setting must be true or false.")
         if type(self.allow_control) is not bool:
-            raise ValueError("Control setting must be true or false.")
+            raise ConfigError("Control setting must be true or false.")
         if (type(self.mqtt_interval) not in (int, float) or not math.isfinite(self.mqtt_interval)
                 or not 1 <= self.mqtt_interval <= 3600):
-            raise ValueError("MQTT publish interval must be between 1 and 3600 seconds.")
+            raise ConfigError("MQTT publish interval must be between 1 and 3600 seconds.")
         if self.mqtt_host and not re.fullmatch(r"[A-Za-z0-9._:\-\[\]]{1,253}", self.mqtt_host):
-            raise ValueError("Enter a plain broker hostname or IP address.")
+            raise ConfigError("Enter a plain broker hostname or IP address.")
 
 def load_config(path: Path | None = None) -> Config:
     try:
@@ -99,11 +133,18 @@ def load_config(path: Path | None = None) -> Config:
             if not isinstance(encrypted, str):
                 raise ValueError("Invalid stored broker password.")
             values["mqtt_password"] = dpapi.unprotect(base64.b64decode(encrypted)).decode("utf-8")
+        # Likewise the DP3 user ID; a config.json from before this, or from a
+        # platform without DPAPI, keeps it in the plain field.
+        encrypted = values.pop(_USER_ID_DPAPI_KEY, None)
+        if encrypted is not None:
+            if not isinstance(encrypted, str):
+                raise ValueError("Invalid stored user ID.")
+            values["user_id"] = dpapi.unprotect(base64.b64decode(encrypted)).decode("utf-8")
         c = Config(**values)
     except (ValueError, TypeError, RecursionError, OSError):
         # Never include JSON fragments, unexpected keys, account values or why
         # decryption failed (wrong Windows user, wrong machine, corrupt blob).
-        raise ValueError("Invalid configuration file. Run local setup again.") from None
+        raise ConfigError("Invalid configuration file. Run local setup again.") from None
     c.validate()
     return c
 
@@ -112,30 +153,31 @@ def save_config(config: Config, path: Path | None = None):
     path = path or data_dir() / "config.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     values = asdict(config)
-    # On Windows, store the broker password DPAPI-protected, scoped to this
-    # Windows user, rather than in the plain mqtt_password field. DPAPI does not
-    # exist elsewhere; there the plain field stays, in a file only this user can
-    # read. See docs/SECURITY.md.
-    if values["mqtt_password"] and os.name == "nt":
+    # Store the broker password DPAPI-protected, scoped to this Windows user,
+    # rather than in the plain mqtt_password field. Without DPAPI it stays in
+    # the plain field, as the user ID does. See docs/SECURITY.md.
+    if values["mqtt_password"] and _DPAPI_AVAILABLE:
         values[_MQTT_PASSWORD_DPAPI_KEY] = base64.b64encode(
             dpapi.protect(values["mqtt_password"].encode("utf-8"))
         ).decode("ascii")
         values["mqtt_password"] = ""
+    if values["user_id"] and _DPAPI_AVAILABLE:
+        values[_USER_ID_DPAPI_KEY] = base64.b64encode(
+            dpapi.protect(values["user_id"].encode("utf-8"))
+        ).decode("ascii")
+        values["user_id"] = ""
     tmp = path.with_suffix(".tmp")
-    # Owner-only from creation, so a plain-text password is never briefly
-    # readable by other users before the rename. Windows ignores the mode.
+    # Owner-only before the first byte is written, not after the rename: off
+    # Windows the file can hold the user ID and broker password in clear. The
+    # fchmod covers a .tmp an interrupted save left behind with another mode.
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    if os.name != "nt":
-        # The mode above applies only to a new file. A temp file left by an
-        # interrupted save keeps its old mode, so tighten it before writing.
-        os.fchmod(fd, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
+        if os.name != "nt":
+            os.fchmod(f.fileno(), 0o600)
         json.dump(values, f, indent=2)
         f.flush()
         os.fsync(f.fileno())
     os.replace(tmp, path)
-    if os.name != "nt":
-        path.chmod(0o600)
 
 
 def control_allowed(path: Path) -> bool:
@@ -144,6 +186,33 @@ def control_allowed(path: Path) -> bool:
         return load_config(path).allow_control
     except (OSError, ValueError):
         return False
+
+
+ROLES = ("collector", "viewer")
+# What every collector and bridge refuses a viewer install with. Constant, like
+# every message here: the desktop shows it and the CLI prints it.
+VIEWER_REFUSAL = ("This install is a viewer (role is \"viewer\" in config.json): it opens no "
+                  "Bluetooth link to the batteries and publishes neither, so it cannot take "
+                  "them from the machine that records them.")
+
+
+def install_role(path: Path) -> str:
+    """The role config.json at ``path`` gives this install: collector or viewer.
+
+    Read apart from the rest of the file's validation, for a collector that
+    needs no DP3 identity: jackery-record runs without any config.json, so
+    no file is a collector, as is one without the field. Anything else fails
+    closed, as control_allowed does: a file that cannot be read, is not a
+    JSON object, or names no known role is a viewer.
+    """
+    try:
+        values = json.loads(path.read_text("utf-8"))
+    except FileNotFoundError:
+        return "collector"
+    except (OSError, ValueError, RecursionError):
+        return "viewer"
+    role = values.get("role", "collector") if isinstance(values, dict) else None
+    return role if role in ROLES else "viewer"
 
 async def resolve_user_id(identifier: str, password: str, region: str) -> str:
     """Explicit setup only. Discard the entire response except the account ID."""

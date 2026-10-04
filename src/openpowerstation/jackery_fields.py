@@ -46,6 +46,14 @@ MAPPED_PROPERTIES = frozenset({
 PEAK_KEYS = ("pow_out_sum_w", "pow_in_sum_w", "cms_batt_temp")
 
 
+# The telemetry that makes a reading worth having: charge and the power in and
+# out. Health is keyed on these and nothing else -- the collector's count of
+# unproductive polls, the bridge's liveness and the add-on supervisor's frame
+# lease -- so a station answering with settings fields alone reads as the
+# outage it is, not as a healthy link. The DP3 path learned the same in #201.
+JACKERY_CORE_KEYS = ("bms_batt_soc", "pow_in_sum_w", "pow_out_sum_w")
+
+
 def map_properties(properties: dict) -> dict:
     """Map only stable, unit-known Jackery properties into dashboard fields."""
     if not isinstance(properties, dict):
