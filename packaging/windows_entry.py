@@ -3,6 +3,6 @@ import multiprocessing
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
-    from opendp3.desktop import main
+    from openpowerstation.desktop import main
     raise SystemExit(main())
 

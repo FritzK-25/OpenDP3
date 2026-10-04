@@ -23,8 +23,8 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from opendp3.bridge import STALE_SECONDS
-from opendp3.storage import read_db
+from openpowerstation.bridge import STALE_SECONDS
+from openpowerstation.storage import read_db
 from scripts import start_all
 from scripts.start_all import verify_broker_state
 

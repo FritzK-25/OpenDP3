@@ -1,7 +1,7 @@
 """Regression coverage for query-level session liveness."""
 
-from opendp3.bridge import collector_state, state_payload
-from opendp3.queries import latest
+from openpowerstation.bridge import collector_state, state_payload
+from openpowerstation.queries import latest
 
 
 def test_latest_liveness_uses_one_newest_receipt_row(evidence, packet):
@@ -77,7 +77,7 @@ def test_housekeeping_frames_do_not_pass_as_telemetry_freshness(evidence, packet
     resets while every field ages out, and a total telemetry outage reads as a
     healthy link serving old data. The two ages have to be reported separately.
     """
-    from opendp3.vendor.packet import Packet
+    from openpowerstation.vendor.packet import Packet
     store, recorder = evidence
 
     # One real measurement frame, then a long silence broken only by a message
@@ -105,7 +105,7 @@ def test_housekeeping_alone_does_not_hold_the_collector_in_recording(evidence, p
     so one undecodable housekeeping frame held the Home Assistant entity at
     "recording" and the telemetry flag at online through a total outage.
     """
-    from opendp3.vendor.packet import Packet
+    from openpowerstation.vendor.packet import Packet
     store, recorder = evidence
     recorder.ingest(packet(seq=1, bms_batt_soc=80), recorder.start_utc, recorder.start_mono)
     housekeeping = Packet(0x35, 0x21, 0x32, 0x07, b"housekeeping").to_bytes()

@@ -1,7 +1,7 @@
 """Offline Qt desktop shell. Device I/O and DB queries use worker threads.
 
 This module owns the window, the recorder service, the worker jobs and the
-snapshot; everything visual lives in :mod:`opendp3.ui`. Pages receive each new
+snapshot; everything visual lives in :mod:`openpowerstation.ui`. Pages receive each new
 snapshot and call back here for anything that touches the device or the database.
 """
 from datetime import datetime

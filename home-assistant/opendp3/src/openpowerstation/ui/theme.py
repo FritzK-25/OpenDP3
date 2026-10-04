@@ -1,6 +1,6 @@
 """Design tokens and the single Qt stylesheet shared by both themes.
 
-This is the only module in :mod:`opendp3.ui` allowed to contain colour literals.
+This is the only module in :mod:`openpowerstation.ui` allowed to contain colour literals.
 ``LIGHT`` and ``DARK`` must always carry identical key sets: the stylesheet is one
 ``string.Template`` rendered against whichever mapping is active, so a token missing
 from one theme raises rather than silently painting the wrong colour.

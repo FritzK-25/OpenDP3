@@ -11,16 +11,16 @@ from types import SimpleNamespace
 
 import pytest
 
-from opendp3 import ble
-from opendp3 import radio
-from opendp3.ble import Session
-from opendp3.cli import _jackery_ble_loop
-from opendp3.config import Config
-from opendp3.jackery import Identity as JackeryIdentity
-from opendp3.jackery import LocalReader
-from opendp3.protocol import Identity
-from opendp3.runtime import Service
-from opendp3.storage import Store, read_db
+from openpowerstation import ble
+from openpowerstation import radio
+from openpowerstation.ble import Session
+from openpowerstation.cli import _jackery_ble_loop
+from openpowerstation.config import Config
+from openpowerstation.jackery import Identity as JackeryIdentity
+from openpowerstation.jackery import LocalReader
+from openpowerstation.protocol import Identity
+from openpowerstation.runtime import Service
+from openpowerstation.storage import Store, read_db
 
 
 def dp3_session(on_event):
@@ -191,8 +191,8 @@ def test_a_failed_dp3_session_reaches_the_runtime_reconnect_path(tmp_path, monke
                 raise ConnectionError("while still connected")
             await asyncio.Event().wait()
 
-    monkeypatch.setattr("opendp3.runtime.ble.scan", scan)
-    monkeypatch.setattr("opendp3.runtime.ble.Session", FailedThenLiveSession)
+    monkeypatch.setattr("openpowerstation.runtime.ble.scan", scan)
+    monkeypatch.setattr("openpowerstation.runtime.ble.Session", FailedThenLiveSession)
     service = Service(settings, tmp_path / "recording.sqlite", lock_dir=tmp_path / "locks")
     service.start()
     try:
@@ -241,10 +241,10 @@ def test_a_session_with_no_valid_frames_is_cancelled_even_while_connected(tmp_pa
             self.on_event("connected", "test session", time.time_ns(), time.monotonic_ns())
             await asyncio.Event().wait()
 
-    monkeypatch.setattr("opendp3.runtime.ble.scan", scan)
-    monkeypatch.setattr("opendp3.runtime.ble.Session", SilentSession)
-    monkeypatch.setattr("opendp3.runtime.SESSION_FRAME_LEASE", 0.02)
-    monkeypatch.setattr("opendp3.runtime.SESSION_LEASE_CHECK", 0.005)
+    monkeypatch.setattr("openpowerstation.runtime.ble.scan", scan)
+    monkeypatch.setattr("openpowerstation.runtime.ble.Session", SilentSession)
+    monkeypatch.setattr("openpowerstation.runtime.SESSION_FRAME_LEASE", 0.02)
+    monkeypatch.setattr("openpowerstation.runtime.SESSION_LEASE_CHECK", 0.005)
     service = Service(settings, tmp_path / "recording.sqlite", lock_dir=tmp_path / "locks")
     service.start()
     try:
@@ -362,7 +362,7 @@ async def test_a_hung_jackery_cleanup_is_reported_instead_of_blocking_reattach()
         async def disconnect(self):
             await asyncio.Event().wait()
 
-    from opendp3 import jackery
+    from openpowerstation import jackery
     original = jackery.GATT_CLOSE_TIMEOUT
     jackery.GATT_CLOSE_TIMEOUT = 0.01
     try:
@@ -415,7 +415,7 @@ async def test_the_jackery_collector_records_the_failure_before_reattaching(tmp_
     async def discover_reader(_timeout, _serial=None):
         return reader
 
-    monkeypatch.setattr("opendp3.jackery.discover_reader", discover_reader)
+    monkeypatch.setattr("openpowerstation.jackery.discover_reader", discover_reader)
     with Store(tmp_path / "jackery.sqlite", reserve_bytes=0) as store:
         await _jackery_ble_loop(
             store,

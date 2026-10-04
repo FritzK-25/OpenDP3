@@ -41,7 +41,7 @@ def _bluez_bytes_map(value):
 
 def _jackery_serial_from_bluez(values):
     """Decode a cached BlueZ advertisement and return its Jackery serial."""
-    from opendp3.jackery import parse_advertisement
+    from openpowerstation.jackery import parse_advertisement
     parsed = parse_advertisement(
         _bluez_bytes_map(values.get("ManufacturerData")),
         _bluez_bytes_map(values.get("ServiceData")),
@@ -158,9 +158,9 @@ async def disconnect_jackery_orphan(serial, *, known_address=None,
 
 
 def main():
-    from opendp3 import ble
-    from opendp3.cli import main as cli_main
-    from opendp3.config import load_config
+    from openpowerstation import ble
+    from openpowerstation.cli import main as cli_main
+    from openpowerstation.config import load_config
     args = sys.argv[1:]
     if len(args) < 3 or args[0] != "--data-dir":
         raise SystemExit("Unsupported headless worker arguments")
@@ -181,7 +181,7 @@ def main():
         # cli._jackery_ble_loop imports discover_reader when the writer lock is
         # already held. Patch the module first so every later rediscovery attempt
         # gets orphan cleanup, not just the first process startup.
-        from opendp3 import jackery
+        from openpowerstation import jackery
         serial = args[4]
         state_path = Path(args[1]) / JACKERY_ADDRESS_STATE
         original_discover = jackery.discover_reader

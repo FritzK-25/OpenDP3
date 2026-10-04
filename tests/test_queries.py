@@ -1,6 +1,6 @@
 """History queries must remain presence-aware when using the fast coverage path."""
-from opendp3.queries import snapshot
-from opendp3.recorder import Recorder
+from openpowerstation.queries import snapshot
+from openpowerstation.recorder import Recorder
 from conftest import add
 
 

@@ -56,7 +56,7 @@ def connected_after(database: Path, since_ns: int) -> str | None:
     """Detail of an authenticated session that started at or after ``since_ns``."""
     if not database.exists():
         return None
-    from opendp3.storage import read_db
+    from openpowerstation.storage import read_db
     try:
         with read_db(database) as db:
             row = db.execute(
@@ -73,7 +73,7 @@ def jackery_frame_after(database: Path, since_ns: int) -> bool | None:
     """True once a Jackery cloud frame has landed at or after ``since_ns``."""
     if not database.exists():
         return False
-    from opendp3.storage import read_db
+    from openpowerstation.storage import read_db
     try:
         with read_db(database) as db:
             row = db.execute("SELECT 1 FROM frames WHERE utc_ns>=? LIMIT 1", (since_ns,)).fetchone()
@@ -101,8 +101,8 @@ def verify_broker_state(data: Path, *, dp3: bool, jackery: bool,
     if not result:
         return result
 
-    from opendp3.bridge import HA_ID_PREFIX, device_id
-    from opendp3.config import load_config
+    from openpowerstation.bridge import HA_ID_PREFIX, device_id
+    from openpowerstation.config import load_config
     cfg = load_config(data/"config.json")
     if not cfg.mqtt_host:
         return result
@@ -191,7 +191,7 @@ def start_collector(data: Path, python: Path) -> str:
     stop = data/"collector.stop"
     # A stop file left by the previous run would stop this one immediately.
     stop.unlink(missing_ok=True)
-    spawn([str(python), "-m", "opendp3", "--data-dir", str(data), "record",
+    spawn([str(python), "-m", "openpowerstation", "--data-dir", str(data), "record",
            "--stop-file", str(stop)], data/"collector.log")
     return "started"
 
@@ -233,7 +233,7 @@ def start_jackery_recorder(data: Path, python: Path) -> str:
     stop.unlink(missing_ok=True)
     # Local BLE only. There is no account to expire and no cloud to be down, so
     # this cannot fail the way the retired cloud recorder did.
-    spawn([str(python), "-m", "opendp3", "--data-dir", str(data), "jackery-record",
+    spawn([str(python), "-m", "openpowerstation", "--data-dir", str(data), "jackery-record",
            "--serial", serial, "--interval", str(JACKERY_POLL_SECONDS), "--stop-file", str(stop)],
           data/"jackery-recorder.log")
     return "started"
@@ -261,8 +261,8 @@ def start_jackery_bridge(data: Path, python: Path) -> str:
 
 def bridge_worker(data: Path) -> int:
     """The bridge itself: single-instance, stoppable by file, run in this process."""
-    from opendp3.bridge import Bridge
-    from opendp3.config import load_config
+    from openpowerstation.bridge import Bridge
+    from openpowerstation.config import load_config
     lock = portalocker.Lock(str(data/"bridge.lock"), timeout=0)
     try:
         lock.acquire()
@@ -300,8 +300,8 @@ def bridge_worker(data: Path) -> int:
 
 def jackery_bridge_worker(data: Path) -> int:
     """The Jackery bridge itself: single-instance, stoppable by file, run in this process."""
-    from opendp3.jackery_bridge import JackeryBridge
-    from opendp3.config import load_config
+    from openpowerstation.jackery_bridge import JackeryBridge
+    from openpowerstation.config import load_config
     lock = portalocker.Lock(str(data/"jackery-bridge.lock"), timeout=0)
     try:
         lock.acquire()
@@ -442,7 +442,7 @@ def main(argv=None) -> int:
 
     if args.gui:
         viewer = python.with_name("pythonw.exe")
-        spawn([str(viewer if viewer.exists() else python), "-m", "opendp3",
+        spawn([str(viewer if viewer.exists() else python), "-m", "openpowerstation",
                "--data-dir", str(data), "gui"], data/"viewer.log")
         print("Viewer      opening (read-only while the headless recorder owns Bluetooth).")
 

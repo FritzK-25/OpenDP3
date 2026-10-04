@@ -63,8 +63,8 @@ def source_digest() -> str:
 
 def provenance() -> dict:
     sys.path.insert(0, str(ROOT / "src"))
-    import opendp3
-    return {"repository": "FritzK-25/OpenPowerstation", "version": opendp3.__version__,
+    import openpowerstation
+    return {"repository": "FritzK-25/OpenPowerstation", "version": openpowerstation.__version__,
             "source_sha256": source_digest()}
 
 
