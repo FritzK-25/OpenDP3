@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import sqlite3
 import threading
 from types import SimpleNamespace
 import time
@@ -108,8 +109,12 @@ def record_across_gap(tmp_path, monkeypatch, packet, *, stalled=0.0, slept=0.0):
     service.start()
 
     def frames():
+        # The file appears before the recorder has created its schema.
         with read_db(service.database) as db:
-            return db.execute("SELECT COUNT(*) FROM frames").fetchone()[0]
+            try:
+                return db.execute("SELECT COUNT(*) FROM frames").fetchone()[0]
+            except sqlite3.OperationalError:
+                return 0
 
     try:
         wait_for(lambda: service.database.exists() and frames() == 2)
