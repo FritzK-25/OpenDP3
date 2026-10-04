@@ -59,6 +59,26 @@ jobs:
           python -m pip install ruff==0.16.10
           ruff check --output-format=github .
 
+  # This repository is public, so a commit's author and committer email is
+  # published with it. Every new commit must use a GitHub no-reply address.
+  # The file scan for personal identifiers runs in the test suite
+  # (tests/test_privacy_check.py). On main this also catches merge commits
+  # made in the GitHub web interface, which use the account's email setting.
+  privacy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: New commits carry no personal email
+        env:
+          RANGE: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || format('{0}..{1}', github.event.before, github.sha) }}
+        run: python scripts/privacy_check.py --commits "$RANGE"
+
   # The release build, with the release's pinned environment. Runs here so a
   # broken build or a lockfile/pyproject mismatch shows up before tagging.
   # On pull requests it skips its own test pass: the test job above already
