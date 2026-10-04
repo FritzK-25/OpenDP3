@@ -3,7 +3,7 @@
 # setuptools' dynamic version, packaging/prepare.py generates the Windows
 # version resource from it, and scripts/bump_version.py is the only thing that
 # should ever edit this line.
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 # The decoder schema version is NOT the application version. It is recorded into
 # every session row and every evidence export, so changing it makes a claim about
