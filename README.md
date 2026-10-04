@@ -5,7 +5,7 @@ integration for supported EcoFlow and Jackery power stations.
 
 No cloud telemetry is required. Your recording stays on your own machine.
 
-> **Public preview (0.2.0).** The recorder, decoder, storage and tests are
+> **Public preview (0.3.0).** The recorder, decoder, storage and tests are
 > mature, but hardware qualification is incomplete. See
 > [what has and has not been qualified](#status-and-known-limits).
 
@@ -26,7 +26,7 @@ can help, see [Help test it](#help-test-it).
 
 ## Pick how you want to use it
 
-**I just want to record my battery (Windows).** Download `OpenDP3-0.2.0.exe`
+**I just want to record my battery (Windows).** Download `OpenPowerstation-0.3.0.exe`
 and its `.sha256` file from the [Releases page](../../releases), check the hash,
 and run it. Scan for your battery, choose it, and press record. The executable
 is unsigned, so Windows SmartScreen will warn you; the hash and the build

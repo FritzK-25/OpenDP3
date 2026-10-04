@@ -1,5 +1,7 @@
-# Unreleased
+# 0.3.0
 
+- The project is now OpenPowerstation. The app slug, MQTT topics, unique IDs
+  and entity IDs keep the `opendp3` name, so existing entities are unchanged.
 - Collector-pin byte accounting holds while a disconnect or capture incident
   keeps extending, so the 30-day / 1-GB pin limits apply without waiting for
   the incident to settle.
