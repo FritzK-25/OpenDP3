@@ -1,5 +1,5 @@
 name: OpenPowerstation Battery Telemetry
-version: "0.2.0"
+version: "0.3.0"
 slug: opendp3
 description: Local EcoFlow DELTA Pro 3 and Jackery Explorer 1000 v2 Bluetooth telemetry over MQTT
 url: https://github.com/FritzK-25/OpenPowerstation

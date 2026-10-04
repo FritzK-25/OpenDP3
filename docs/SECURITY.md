@@ -1,6 +1,6 @@
 # Security and evidence trust
 
-Applies to OpenDP3 0.2.0, using decoder
+Applies to OpenPowerstation 0.3.0, using decoder
 `dp3-mr521/0.1.4+7cde8e592258`. This is an unofficial local diagnostic recorder,
 not a safety system, secure device-management product, or forensic signing service.
 The [security review disposition](SECURITY_REVIEW.md) records the changes in this release.
