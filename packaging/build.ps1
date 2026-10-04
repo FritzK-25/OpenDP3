@@ -1,7 +1,7 @@
 # Builds the standalone executable. Never starts, stops, or replaces a running recorder.
 #
 # The output filename defaults to OpenPowerstation-<version>.exe, derived from the single
-# version source in src/opendp3/__init__.py. Pass -OutputName to override.
+# version source in src/openpowerstation/__init__.py. Pass -OutputName to override.
 param([string]$OutputName = "")
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot

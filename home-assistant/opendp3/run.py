@@ -137,7 +137,7 @@ def freshness_policies(options, data: Path) -> dict[str, FreshnessPolicy]:
 
 
 def prepare(data: Path, configuration: Path, options):
-    from opendp3.config import load_config
+    from openpowerstation.config import load_config
 
     # Use a dedicated app config mount, never the full HA configuration tree.
     cfg = load_config(configuration / "import.json")
@@ -161,7 +161,7 @@ def prepare(data: Path, configuration: Path, options):
 
 
 def commands(options, data: Path):
-    prefix = [sys.executable, "-u", "-m", "opendp3", "--data-dir", str(data)]
+    prefix = [sys.executable, "-u", "-m", "openpowerstation", "--data-dir", str(data)]
     worker = [sys.executable, "-u", "/opt/opendp3/linux_worker.py",
               "--data-dir", str(data)]
     jobs = {}

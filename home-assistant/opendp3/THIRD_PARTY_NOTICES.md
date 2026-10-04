@@ -3,7 +3,7 @@ OpenPowerstation is an independent project and is not affiliated with EcoFlow or
 
 # Third-party source
 
-The files in `src/opendp3/vendor/` originate from
+The files in `src/openpowerstation/vendor/` originate from
 https://github.com/rabits/ha-ef-ble at commit
 `7cde8e5922589b5e3c81585890b5188747f5b037` (2026-08-25).
 Original locations: `custom_components/ef_ble/eflib/` and its `pb/` directory.

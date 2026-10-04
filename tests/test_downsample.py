@@ -8,10 +8,10 @@ import json
 
 import pytest
 
-from opendp3.jackery_fields import PEAK_KEYS, map_properties
-from opendp3.recorder import Recorder
-from opendp3.storage import Store
-from opendp3.validation import verify_recording
+from openpowerstation.jackery_fields import PEAK_KEYS, map_properties
+from openpowerstation.recorder import Recorder
+from openpowerstation.storage import Store
+from openpowerstation.validation import verify_recording
 
 SERIAL = "123456789012345"
 DAY_NS = 86_400 * 10**9

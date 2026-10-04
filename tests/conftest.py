@@ -4,8 +4,8 @@ os.environ.setdefault("MPLCONFIGDIR",os.path.abspath("artifacts/matplotlib"))
 import shutil
 import time
 import pytest
-from opendp3.vendor.packet import Packet
-from opendp3.vendor.pb.mr521_pb2 import DisplayPropertyUpload
+from openpowerstation.vendor.packet import Packet
+from openpowerstation.vendor.pb.mr521_pb2 import DisplayPropertyUpload
 
 @pytest.fixture
 def packet():
@@ -16,8 +16,8 @@ def packet():
 
 @pytest.fixture
 def evidence(tmp_path):
-    from opendp3.recorder import Recorder
-    from opendp3.storage import Store
+    from openpowerstation.recorder import Recorder
+    from openpowerstation.storage import Store
     with Store(tmp_path/"recording.sqlite",reserve_bytes=0) as store:
         recorder = Recorder(store,utc_ns=1_000_000_000_000_000_000,mono_ns=0)
         yield store,recorder
@@ -81,7 +81,7 @@ def demo_database(tmp_path_factory):
     building it at once on a contended disk.
     """
     import portalocker
-    from opendp3.demo import make_demo
+    from openpowerstation.demo import make_demo
     root = tmp_path_factory.getbasetemp()
     if os.environ.get("PYTEST_XDIST_WORKER"):
         root = root.parent

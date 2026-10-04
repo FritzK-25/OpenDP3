@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-import opendp3
+import openpowerstation
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "packaging"))
@@ -25,16 +25,16 @@ import project_version  # noqa: E402
 # docs is exempt: it describes a release, it does not configure a build.
 SOURCE_GLOBS = ["src/**/*.py", "packaging/*.py", "packaging/*.ps1", "packaging/*.spec",
                 "scripts/*.py", "tests/*.py", "pyproject.toml"]
-ALLOWED = {Path("src/opendp3/__init__.py")}
+ALLOWED = {Path("src/openpowerstation/__init__.py")}
 
 
 def test_single_source_matches_the_package():
-    assert project_version.read() == opendp3.__version__
+    assert project_version.read() == openpowerstation.__version__
 
 
 def test_version_literal_appears_in_exactly_one_place():
     """The regression this whole framework exists to prevent."""
-    version = opendp3.__version__
+    version = openpowerstation.__version__
     offenders = []
     for pattern in SOURCE_GLOBS:
         for path in ROOT.glob(pattern):
@@ -45,13 +45,13 @@ def test_version_literal_appears_in_exactly_one_place():
                 if version in line:
                     offenders.append(f"{relative}:{number}: {line.strip()}")
     assert not offenders, (
-        "Hardcoded version outside src/opendp3/__init__.py:\n  " + "\n  ".join(offenders))
+        "Hardcoded version outside src/openpowerstation/__init__.py:\n  " + "\n  ".join(offenders))
 
 
 def test_pyproject_declares_a_dynamic_version():
     text = (ROOT / "pyproject.toml").read_text("utf-8")
     assert 'dynamic = ["version"]' in text
-    assert 'version = {attr = "opendp3.__version__"}' in text
+    assert 'version = {attr = "openpowerstation.__version__"}' in text
     # A static version key under [project] would silently win over the dynamic one.
     project_block = text.split("[project]", 1)[1].split("\n[", 1)[0]
     assert not re.search(r'^version\s*=', project_block, re.MULTILINE)
@@ -59,21 +59,21 @@ def test_pyproject_declares_a_dynamic_version():
 
 def test_decoder_version_is_independent_of_the_app_version():
     """A release bump must never restate what the decoder claims about the data."""
-    assert opendp3.DECODER_VERSION == (
-        "dp3-mr521/" + opendp3.DECODER_SCHEMA_VERSION + "+" + opendp3.UPSTREAM_REVISION[:12])
-    source = (ROOT / "src/opendp3/__init__.py").read_text("utf-8")
+    assert openpowerstation.DECODER_VERSION == (
+        "dp3-mr521/" + openpowerstation.DECODER_SCHEMA_VERSION + "+" + openpowerstation.UPSTREAM_REVISION[:12])
+    source = (ROOT / "src/openpowerstation/__init__.py").read_text("utf-8")
     # The decoder string is built from its own constant, not from __version__.
     assert "__version__" not in source.split("DECODER_VERSION")[1]
 
 
 def test_bumping_the_version_leaves_the_decoder_untouched(tmp_path):
-    original = (ROOT / "src/opendp3/__init__.py").read_text("utf-8")
+    original = (ROOT / "src/openpowerstation/__init__.py").read_text("utf-8")
     copy = tmp_path / "__init__.py"
     copy.write_text(original, encoding="utf-8")
     bumped = bump_version.PATTERN.sub('__version__ = "9.9.9"', original, count=1)
     copy.write_text(bumped, encoding="utf-8")
     assert project_version.read("__version__", copy) == "9.9.9"
-    assert project_version.read("DECODER_SCHEMA_VERSION", copy) == opendp3.DECODER_SCHEMA_VERSION
+    assert project_version.read("DECODER_SCHEMA_VERSION", copy) == openpowerstation.DECODER_SCHEMA_VERSION
 
 
 @pytest.mark.parametrize("current,level,expected", [
@@ -92,12 +92,12 @@ def test_bump_rejects_bad_targets(argument):
 
     "CURRENT" stands in for the live version so this file holds no version literal.
     """
-    target = opendp3.__version__ if argument == "CURRENT" else argument
+    target = openpowerstation.__version__ if argument == "CURRENT" else argument
     assert bump_version.main([target, "--dry-run"]) == 1
 
 
 def test_windows_version_resource_is_generated_from_the_source():
-    version = opendp3.__version__
+    version = openpowerstation.__version__
     numeric = project_version.file_version_tuple(version)
     assert numeric == tuple(int(p) for p in version.split(".")) + (0,)
     resource = ROOT / "packaging/version_info.txt"
@@ -116,6 +116,6 @@ def test_prepare_regenerates_the_resource_deterministically():
                                capture_output=True, text=True, timeout=300)
     assert completed.returncode == 0, completed.stderr
     after = resource.read_text("utf-8")
-    assert opendp3.__version__ in after
+    assert openpowerstation.__version__ in after
     if before is not None:
         assert before == after, "prepare.py is not deterministic"

@@ -1,7 +1,7 @@
 """Generate the icon, the Windows version resource, and dependency notices.
 
 Never copies local data. The version resource is generated rather than tracked so
-the application version has exactly one source: src/opendp3/__init__.py.
+the application version has exactly one source: src/openpowerstation/__init__.py.
 """
 from importlib.metadata import distributions
 from pathlib import Path
@@ -14,7 +14,7 @@ from project_version import file_version_tuple, read as read_version
 root = Path(__file__).resolve().parent.parent
 folder = root / "artifacts/package-licenses"
 folder.mkdir(parents=True, exist_ok=True)
-skip = {"opendp3", "pytest", "pytest-asyncio", "pytest-qt",
+skip = {"openpowerstation", "pytest", "pytest-asyncio", "pytest-qt",
         "pyinstaller-hooks-contrib", "setuptools", "pip", "altgraph", "pefile",
         "pywin32-ctypes", "iniconfig", "pluggy"}
 index = []

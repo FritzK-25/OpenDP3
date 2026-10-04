@@ -47,7 +47,7 @@ cd OpenPowerstation
 python -m venv .venv
 .venv/bin/pip install -e ".[test]"      # Windows: .venv\Scripts\pip
 .venv/bin/python -m pytest -q
-.venv/bin/python -m opendp3 scan        # find nearby supported batteries
+.venv/bin/python -m openpowerstation scan        # find nearby supported batteries
 ```
 
 Add `.[gui]` for the desktop window and `.[charts]` for evidence export.

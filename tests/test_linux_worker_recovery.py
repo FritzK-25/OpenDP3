@@ -47,11 +47,11 @@ def device_props(*, address, connected, name=None):
 
 
 def fake_worker_modules(reader, cli_calls=2):
-    fake_package = ModuleType("opendp3")
-    fake_ble = ModuleType("opendp3.ble")
-    fake_jackery = ModuleType("opendp3.jackery")
-    fake_cli = ModuleType("opendp3.cli")
-    fake_config = ModuleType("opendp3.config")
+    fake_package = ModuleType("openpowerstation")
+    fake_ble = ModuleType("openpowerstation.ble")
+    fake_jackery = ModuleType("openpowerstation.jackery")
+    fake_cli = ModuleType("openpowerstation.cli")
+    fake_config = ModuleType("openpowerstation.config")
 
     original_discover = AsyncMock(return_value=reader)
     fake_jackery.discover_reader = original_discover
@@ -68,11 +68,11 @@ def fake_worker_modules(reader, cli_calls=2):
 
     fake_cli.main = cli_main
     return {
-        "opendp3": fake_package,
-        "opendp3.ble": fake_ble,
-        "opendp3.jackery": fake_jackery,
-        "opendp3.cli": fake_cli,
-        "opendp3.config": fake_config,
+        "openpowerstation": fake_package,
+        "openpowerstation.ble": fake_ble,
+        "openpowerstation.jackery": fake_jackery,
+        "openpowerstation.cli": fake_cli,
+        "openpowerstation.config": fake_config,
     }, original_discover
 
 

@@ -23,7 +23,7 @@ archive = CArchiveReader(str(executable))
 assert not any(name.lower().endswith((".sqlite", ".sqlite-wal", ".sqlite-shm"))
                or Path(name).name.lower() == "config.json" for name in archive.toc)
 pyz = archive.open_embedded_archive("PYZ.pyz")
-encryption = pyz.extract("opendp3.vendor.encryption")
+encryption = pyz.extract("openpowerstation.vendor.encryption")
 
 
 def compiled_names(code):

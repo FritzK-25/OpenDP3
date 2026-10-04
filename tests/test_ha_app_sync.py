@@ -14,9 +14,9 @@ def test_home_assistant_app_copy_matches_the_sources():
 
 
 def test_home_assistant_app_version_matches_the_package():
-    import opendp3
+    import openpowerstation
     config = (ROOT / "home-assistant" / "opendp3" / "config.yaml").read_text("utf-8")
-    assert f'version: "{opendp3.__version__}"' in config
+    assert f'version: "{openpowerstation.__version__}"' in config
 
 
 def test_source_digest_order_does_not_depend_on_the_platform():

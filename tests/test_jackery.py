@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from opendp3.jackery import (
+from openpowerstation.jackery import (
     Identity,
     LocalReader,
     _ResponseAssembler,
@@ -204,7 +204,7 @@ def test_winrt_connectable_advertisement_is_required():
 def _discovery_fakes(monkeypatch, serials):
     """Advertise one Explorer per serial, in order, and record what is attached."""
     from types import SimpleNamespace
-    from opendp3 import jackery
+    from openpowerstation import jackery
 
     opened = []
 

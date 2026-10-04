@@ -2,8 +2,8 @@ import json
 import zipfile
 import pytest
 from conftest import add
-from opendp3.exporting import export_evidence
-from opendp3.storage import read_db
+from openpowerstation.exporting import export_evidence
+from openpowerstation.storage import read_db
 
 # Evidence exports render charts, so this module needs the `charts` extra. It is
 # deliberately part of `[test]` rather than of `[gui]`: these assertions are the
@@ -33,7 +33,7 @@ def test_export_allowlist_excludes_private_fields_notes_and_raw(evidence,packet,
     with pytest.raises(FileExistsError): export_evidence(store.path,dest)
 
 def test_synthetic_and_incomplete_export_marked(tmp_path):
-    from opendp3.demo import make_demo
+    from openpowerstation.demo import make_demo
     path=make_demo(tmp_path/"demo.sqlite",seconds=395)
     with read_db(path) as db:
         iid=db.execute("SELECT id FROM incidents").fetchone()[0]

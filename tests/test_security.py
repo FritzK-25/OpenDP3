@@ -6,11 +6,11 @@ from types import SimpleNamespace
 
 import pytest
 
-from opendp3.config import Config, load_config, resolve_user_id
-from opendp3.protocol import AuthenticationError, ProtocolError, derive_session_key, parse_packet
-from opendp3.vendor import keydata
-from opendp3.vendor.crc import crc16
-from opendp3.vendor.packet import InvalidPacket, Packet, PacketV4
+from openpowerstation.config import Config, load_config, resolve_user_id
+from openpowerstation.protocol import AuthenticationError, ProtocolError, derive_session_key, parse_packet
+from openpowerstation.vendor import keydata
+from openpowerstation.vendor.crc import crc16
+from openpowerstation.vendor.packet import InvalidPacket, Packet, PacketV4
 
 
 def test_every_seed_requires_a_complete_table_window():
@@ -86,10 +86,10 @@ def test_parser_failures_never_log_or_return_payloads(case, caplog):
         "v4_header": (PacketV4, corrupt_header_with_valid_body_crc(v4)),
     }
     codec, raw = cases[case]
-    with caplog.at_level(logging.ERROR, logger="opendp3.vendor.packet"):
+    with caplog.at_level(logging.ERROR, logger="openpowerstation.vendor.packet"):
         result = codec.from_bytes(raw)
     assert Packet.is_invalid(result)
-    records = [r for r in caplog.records if r.name == "opendp3.vendor.packet"]
+    records = [r for r in caplog.records if r.name == "openpowerstation.vendor.packet"]
     assert records and all(not r.args for r in records)
     output = caplog.text + repr(result)
     assert raw.hex() not in output and secret.hex() not in output and secret.decode() not in output
@@ -125,7 +125,7 @@ def test_malformed_config_shape_fails_safely(tmp_path, contents):
 
 
 def test_cli_bad_config_has_no_traceback_or_input_echo(tmp_path, capsys):
-    from opendp3.cli import main
+    from openpowerstation.cli import main
     values = sample_config(); values["temperature_jump"] = "PRIVATE_VALUE"
     (tmp_path / "config.json").write_text(json.dumps(values), encoding="utf-8")
     assert main(["--data-dir", str(tmp_path), "record"]) == 1

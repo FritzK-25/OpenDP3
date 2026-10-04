@@ -8,7 +8,7 @@ from dbus_fast.aio import MessageBus
 
 
 async def main():
-    from opendp3.config import load_config
+    from openpowerstation.config import load_config
     address = load_config(Path("/data/config.json")).address.upper()
     bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
     previous = None

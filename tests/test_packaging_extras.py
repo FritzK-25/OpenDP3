@@ -22,16 +22,16 @@ OPTIONAL_PACKAGES = RENDER_PACKAGES | DESKTOP_PACKAGES | PACKAGING_PACKAGES
 
 # Imported by a collector, a bridge or the CLI on the headless production path.
 HEADLESS_MODULES = (
-    "opendp3.cli",
-    "opendp3.bridge",
-    "opendp3.jackery_bridge",
-    "opendp3.recorder",
-    "opendp3.storage",
-    "opendp3.queries",
-    "opendp3.protocol",
-    "opendp3.decoder",
-    "opendp3.config",
-    "opendp3.runtime",
+    "openpowerstation.cli",
+    "openpowerstation.bridge",
+    "openpowerstation.jackery_bridge",
+    "openpowerstation.recorder",
+    "openpowerstation.storage",
+    "openpowerstation.queries",
+    "openpowerstation.protocol",
+    "openpowerstation.decoder",
+    "openpowerstation.config",
+    "openpowerstation.runtime",
 )
 
 
@@ -52,7 +52,7 @@ def metadata():
 
 
 def extra_closure(name, seen=None):
-    """Every package an extra installs, following `opendp3[...]` self-references."""
+    """Every package an extra installs, following `openpowerstation[...]` self-references."""
     extras = metadata()["optional-dependencies"]
     seen = set() if seen is None else seen
     if name in seen:
@@ -60,7 +60,7 @@ def extra_closure(name, seen=None):
     seen.add(name)
     resolved = set()
     for requirement in extras[name]:
-        if requirement.split("[")[0].strip().lower() == "opendp3":
+        if requirement.split("[")[0].strip().lower() == "openpowerstation":
             inner = requirement[requirement.index("[") + 1:requirement.index("]")]
             for referenced in inner.split(","):
                 resolved |= extra_closure(referenced.strip(), seen)
@@ -109,7 +109,7 @@ def test_gui_extra_carries_the_desktop_and_its_charts():
 
 
 def test_charts_extra_does_not_drag_in_the_desktop():
-    """`opendp3 export` is a CLI command; rendering evidence must not need Qt."""
+    """`openpowerstation export` is a CLI command; rendering evidence must not need Qt."""
     assert RENDER_PACKAGES <= extra_closure("charts")
     assert not (extra_closure("charts") & DESKTOP_PACKAGES)
 
@@ -153,7 +153,7 @@ def test_headless_modules_import_without_the_desktop_packages():
 
 def test_headless_cli_runs_without_the_desktop_packages():
     result = run_headless(
-        "from opendp3.cli import main\n"
+        "from openpowerstation.cli import main\n"
         "raise SystemExit(main(['--help']))\n"
     )
     assert result.returncode == 0, result.stderr
@@ -161,14 +161,14 @@ def test_headless_cli_runs_without_the_desktop_packages():
 
 def test_desktop_command_explains_the_missing_extra():
     result = run_headless(
-        "from opendp3.cli import main\n"
+        "from openpowerstation.cli import main\n"
         "code = main(['gui'])\n"
         "print('exit', code)\n"
     )
     assert "exit 1" in result.stdout, result.stdout + result.stderr
     # An operator error, not a traceback.
     assert "Traceback" not in result.stderr
-    assert "opendp3[gui]" in result.stderr
+    assert "openpowerstation[gui]" in result.stderr
     assert "PySide6" in result.stderr
 
 
@@ -182,8 +182,8 @@ def test_export_explains_the_missing_extra_at_the_chart_boundary(tmp_path):
     database = tmp_path / "demo.sqlite"
     destination = tmp_path / "out"
     result = run_headless(
-        "from opendp3.demo import make_demo\n"
-        "from opendp3.cli import main\n"
+        "from openpowerstation.demo import make_demo\n"
+        "from openpowerstation.cli import main\n"
         f"make_demo({str(database)!r})\n"
         f"code = main(['export', {str(database)!r}, {str(destination)!r}])\n"
         "print('exit', code)\n"
@@ -191,7 +191,7 @@ def test_export_explains_the_missing_extra_at_the_chart_boundary(tmp_path):
     assert "exit 1" in result.stdout, result.stdout + result.stderr
     assert "Traceback" not in result.stderr
     assert "matplotlib" in result.stderr
-    assert "opendp3[charts]" in result.stderr
+    assert "openpowerstation[charts]" in result.stderr
 
 
 def test_each_guard_names_an_extra_that_supplies_what_it_is_missing():
@@ -203,8 +203,8 @@ def test_each_guard_names_an_extra_that_supplies_what_it_is_missing():
     """
     for module, extra, package in (("cli.py", "gui", "pyside6"),
                                    ("exporting.py", "charts", "matplotlib")):
-        source = (SOURCE / "opendp3" / module).read_text(encoding="utf-8")
-        assert f"pip install 'opendp3[{extra}]'" in source, module
+        source = (SOURCE / "openpowerstation" / module).read_text(encoding="utf-8")
+        assert f"pip install 'openpowerstation[{extra}]'" in source, module
         assert package in extra_closure(extra), (module, extra, package)
 
 

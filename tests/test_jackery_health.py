@@ -3,8 +3,8 @@
 A detector that stays quiet through a real fault destroys the only recording of
 it, so each rule is tested for firing AND for staying quiet during ordinary use.
 """
-from opendp3.jackery_fields import map_properties
-from opendp3.jackery_health import UNMAPPED_STATE_LIMIT, findings
+from openpowerstation.jackery_fields import map_properties
+from openpowerstation.jackery_health import UNMAPPED_STATE_LIMIT, findings
 
 
 def properties(**overrides):
@@ -125,7 +125,7 @@ def test_the_poll_rate_may_now_be_seconds_not_minutes():
     the recorder against the station's single BLE client slot.
     """
     import pytest
-    from opendp3.cli import do_jackery_compact, do_jackery_record
+    from openpowerstation.cli import do_jackery_compact, do_jackery_record
     for bad in (0, 0.5, -1, 3601):
         with pytest.raises(ValueError, match="between 1 and 3600"):
             do_jackery_record(None, None, interval=bad)
