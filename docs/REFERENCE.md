@@ -62,7 +62,7 @@ Releases page, build it yourself with
 [the Windows build instructions](PACKAGING.md), or use the source launcher
 after installing the dependencies below.
 
-Double-click **OpenDP3-0.2.0.exe**, the current build. It is a standalone Windows x64 desktop build:
+Double-click **OpenPowerstation-0.3.0.exe**, the current build. It is a standalone Windows x64 desktop build:
 Python and its dependencies are included; no Python installation is needed.
 Startup may take several seconds while the bundled libraries unpack.
 It does not connect to the battery automatically.
@@ -187,7 +187,7 @@ The protocol foundation is [ha-ef-ble](https://github.com/rabits/ha-ef-ble) at
 revision `7cde8e5922589b5e3c81585890b5188747f5b037`. OpenPowerstation uses its DP3 framing,
 authentication research and `mr521.proto` definitions without requiring Home
 Assistant. The decoder version is `dp3-mr521/0.1.4+7cde8e592258`; the application
-version is `0.2.0`. Schema presence does not establish that the selected DP3
+version is `0.3.0`. Schema presence does not establish that the selected DP3
 publishes a field, that OpenPowerstation knows its routing, or that its units are verified.
 
 The app supports one explicitly selected DP3, with serial prefixes `MR51` or
