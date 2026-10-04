@@ -1,4 +1,10 @@
-"""Overview: headline readings, the four aligned charts, and playback."""
+"""Overview: headline readings, the aligned charts, and playback.
+
+What a session has -- its fields, the chart panels they need, its headline
+readings -- comes from that session's own registry (fields.fields_for_session),
+the one the coverage table and the evidence export read. A Jackery session
+gets its voltage, frequency and estimated-time panels; a DP3 session does not.
+"""
 import math
 import html
 import time
@@ -10,8 +16,9 @@ from PySide6.QtWidgets import (
     QSizePolicy, QToolTip, QVBoxLayout, QWidget,
 )
 
-from ...decoder import FIELD_MAP
-from ...queries import plot_arrays
+from ...fields import (CHART_GROUPS, DP3_FIELDS, JACKERY_OBSERVATIONS, chart_groups, device,
+                       fields_for_session)
+from ...queries import gap, plot_arrays
 from ..theme import series as series_colors
 from ..theme import tokens
 from ..charts import CHART_HELP, ClickComboBox, PlaybackSlider, elapsed_text, nearest_sample, sample_value
@@ -36,13 +43,26 @@ SHORT_NAMES = {
     "plug_in_info_acp_err_code": "AC port error", "plug_in_info_4p8_1_err_code": "4+8 port 1 err",
     "plug_in_info_4p8_2_err_code": "4+8 port 2 err", "plug_in_info_dcp_err_code": "DC port 1 err",
     "plug_in_info_dcp2_err_code": "DC port 2 err",
+    "jackery_ac_input_w": "AC in", "jackery_ac_voltage_v": "AC out",
+    "jackery_ac_frequency_hz": "AC out", "jackery_charge_time_h": "Charge time",
+    "jackery_output_time_h": "Output time",
 }
-GROUPS = [("temperature", "Temperature", "°C"), ("power", "Power", "W"),
-          ("soc", "SOC / SOH", "%"), ("state", "State / errors", "raw")]
-CARDS = [("bms_max_cell_temp", "BMS MAX CELL", "temperature", "danger"),
-         ("bms_batt_soc", "MAIN BATTERY SOC", "battery", "ok"),
-         ("pow_in_sum_w", "TOTAL INPUT", "inflow", "info"),
-         ("pow_out_sum_w", "TOTAL OUTPUT", "outflow", "warn")]
+# A panel per chart group (fields.CHART_GROUPS); a session shows the ones its
+# fields use.
+TITLES = {"temperature": ("Temperature", "°C"), "power": ("Power", "W"), "soc": ("SOC / SOH", "%"),
+          "voltage": ("Voltage", "V"), "frequency": ("Frequency", "Hz"),
+          "duration": ("Estimated time", "h"), "state": ("State / errors", "raw")}
+# Headline readings per device (fields.device): key, title, glyph, tone.
+CARDS = {
+    "dp3": [("bms_max_cell_temp", "BMS MAX CELL", "temperature", "danger"),
+            ("bms_batt_soc", "MAIN BATTERY SOC", "battery", "ok"),
+            ("pow_in_sum_w", "TOTAL INPUT", "inflow", "info"),
+            ("pow_out_sum_w", "TOTAL OUTPUT", "outflow", "warn")],
+    "jackery": [("cms_batt_temp", "BATTERY TEMPERATURE", "temperature", "danger"),
+                ("bms_batt_soc", "BATTERY SOC", "battery", "ok"),
+                ("pow_in_sum_w", "TOTAL INPUT", "inflow", "info"),
+                ("pow_out_sum_w", "TOTAL OUTPUT", "outflow", "warn")],
+}
 GAP_KINDS = {"device_error", "suspect_telemetry", "manual", "disconnected"}
 FOOTER = ("Host receipt timing · Gaps are unknown state · Hardware qualification pending")
 
@@ -57,9 +77,19 @@ class OverviewPage(QWidget):
         self.window = window
         self.curves = {}
         self.markers = {}
+        # The registry of the session on screen (see _use_session). Until one
+        # is loaded the window describes a DP3, so the page does too.
+        self.registry = DP3_FIELDS
+        self.fields = {field.key: field for field in self.registry}
+        self.groups = chart_groups({})
+        self.device = device({})
+        # One brush per colour, reused: the plot's symbol cache is keyed by
+        # brush object, so a fresh brush per point redraws every state symbol.
+        self.brushes = {}
         # SOH is a different estimate from SOC. Showing both by default makes a
         # near-100% health line flatten small charge changes in an automatic fit.
-        self.hidden_fields = {key for key in FIELD_MAP if key.endswith("_soh")}
+        self.hidden_fields = {field.key for field in (*DP3_FIELDS, *JACKERY_OBSERVATIONS)
+                              if field.key.endswith("_soh")}
         self.focused_group = None
         self.state_annotations = []
         self.state_rows = {}
@@ -107,7 +137,9 @@ class OverviewPage(QWidget):
         self.mark_button = QPushButton("Mark incident")
         self.mark_button.clicked.connect(window.mark)
         self.export_button = QPushButton("Export evidence…")
-        self.export_button.clicked.connect(window.export)
+        self.export_button.setToolTip("Exports the whole session shown. To export one incident's "
+                                      "window, select it on Incidents and export it there.")
+        self.export_button.clicked.connect(window.export_session)
         self.stop_button = QPushButton("Stop recording")
         self.stop_button.setObjectName("danger")
         self.stop_button.clicked.connect(window.stop_recording)
@@ -121,11 +153,25 @@ class OverviewPage(QWidget):
         row = QHBoxLayout()
         row.setSpacing(14)
         self.cards = {}
-        for key, title, glyph, tone in CARDS:
+        for key, title, glyph, tone in CARDS[self.device]:
             card = StatCard(key, title, glyph, tone, self)
             self.cards[key] = card
             row.addWidget(card)
         return row
+
+    def _set_cards(self):
+        """Replace the headline readings with this device's, in the same dict."""
+        row = self.cards_widget.layout()
+        for card in self.cards.values():
+            row.removeWidget(card)
+            card.deleteLater()
+        # Cleared, not rebound: the window holds this dict as Window.cards.
+        self.cards.clear()
+        for key, title, glyph, tone in CARDS[self.device]:
+            card = StatCard(key, title, glyph, tone, self)
+            card.apply_theme(self.theme)
+            self.cards[key] = card
+            row.addWidget(card)
 
     def _selectors(self):
         row = QHBoxLayout()
@@ -186,10 +232,13 @@ class OverviewPage(QWidget):
         chart_layout.setContentsMargins(0, 0, 0, 0)
         chart_layout.setSpacing(10)
         self.panels = {}
-        for group, title, unit in GROUPS:
-            # All four share one x axis, so only the bottom panel labels it.
+        for group in CHART_GROUPS:
+            title, unit = TITLES[group]
+            # All share one x axis, so only the bottom panel labels it.
             panel = ChartPanel(group, f"{title} {unit}" if unit != "raw" else title,
-                               axis_label=group == GROUPS[-1][0], parent=self)
+                               axis_label=group == CHART_GROUPS[-1], parent=self)
+            if group not in self.groups:
+                panel.hide()
             chart_layout.addWidget(panel, 1)
             self.panels[group] = panel
             self.markers[group] = []
@@ -276,13 +325,13 @@ class OverviewPage(QWidget):
             self.hidden_fields.discard(key)
         else:
             self.hidden_fields.add(key)
-        panel = self.panels[FIELD_MAP[key].group]
+        panel = self.panels[self.fields[key].group]
         if panel.scale_choice.currentData() != "hold":
             panel.value_limits = None
         self.redraw()
 
     def set_group_visible(self, group, visible):
-        keys = {key for key, field in FIELD_MAP.items() if field.group == group}
+        keys = {key for key, field in self.fields.items() if field.group == group}
         if visible:
             self.hidden_fields.difference_update(keys)
         else:
@@ -291,18 +340,47 @@ class OverviewPage(QWidget):
             self.panels[group].value_limits = None
         self.redraw()
 
-    def focus_chart(self, group):
-        self.focused_group = None if group == self.focused_group else group
+    def _use_session(self, session):
+        """Show what this session's own registry has: its fields, panels and cards.
+
+        The curves of the previous registry go, so nothing drawn for one device
+        lingers on another's charts or keeps another's labels.
+        """
+        registry = fields_for_session(session)
+        if registry is self.registry:
+            return
+        for key, curve in self.curves.items():
+            self.panels[self.fields[key].group].plot.removeItem(curve)
+        self.curves.clear()
+        self.inspection = {}
+        self.registry = registry
+        self.fields = {field.key: field for field in registry}
+        self.groups = chart_groups(session)
+        if device(session) != self.device:
+            self.device = device(session)
+            self._set_cards()
+        if self.focused_group not in self.groups:
+            self.focused_group = None
+        self._layout_panels()
+
+    def _layout_panels(self):
+        """Show the session's panels, or only the focused one."""
         focused = self.focused_group is not None
         for key, panel in self.panels.items():
-            panel.setVisible(not focused or key == self.focused_group)
+            panel.setVisible(key in self.groups and (not focused or key == self.focused_group))
             panel.focus_button.setVisible(not focused)
-            panel.plot.setLabel("bottom", "Elapsed receipt time (h:mm:ss)" if focused or key == "state" else None)
         self.cards_widget.setVisible(not focused)
         self.actions_widget.setVisible(not focused)
         self.banner.setVisible(not focused)
         self.all_charts_button.setVisible(focused)
         self.fit_y_button.setVisible(self.focused_group != "state")
+
+    def focus_chart(self, group):
+        self.focused_group = None if group == self.focused_group else group
+        focused = self.focused_group is not None
+        self._layout_panels()
+        for key, panel in self.panels.items():
+            panel.plot.setLabel("bottom", "Elapsed receipt time (h:mm:ss)" if focused or key == "state" else None)
         self.clear_inspection()
         self.redraw()
 
@@ -326,6 +404,7 @@ class OverviewPage(QWidget):
             self._syncing_time = False
 
     def update_snapshot(self, snap, now_t):
+        self._use_session(snap["session"])
         for row in snap["coverage"]:
             card = self.cards.get(row["key"])
             if card:
@@ -339,27 +418,35 @@ class OverviewPage(QWidget):
                             f"windows · {FOOTER}")
 
     def _series_color(self, group, key):
-        keys = [k for k, field in FIELD_MAP.items() if field.group == group]
+        keys = [k for k, field in self.fields.items() if field.group == group]
         palette = series_colors(self.theme)
         return palette[keys.index(key) % len(palette)]
 
+    def _brush(self, colour):
+        brush = self.brushes.get(colour)
+        if brush is None:
+            brush = self.brushes[colour] = pg.mkBrush(colour)
+        return brush
+
     def _render_series(self, snap):
         bounds = {}
+        thinning = snap.get("thinning")
         for key, points in snap["series"].items():
-            if key not in FIELD_MAP:
+            field = self.fields.get(key)
+            if field is None:
                 continue
-            group = FIELD_MAP[key].group
+            group = field.group
             if key not in self.curves:
                 curve = self.panels[group].plot.plot(
                     pen=pg.mkPen(self._series_color(group, key), width=1.7),
-                    name=FIELD_MAP[key].label, connect="finite")
+                    name=field.label, connect="finite")
                 curve.setDownsampling(auto=group != "state", method="peak")
                 curve.setClipToView(group != "state")
                 self.curves[key] = curve
             self.curves[key].setVisible(key not in self.hidden_fields)
             if group == "state":
                 continue
-            x, y = plot_arrays(points)
+            x, y = plot_arrays(points, thinning)
             self.curves[key].setData(x, y, connect="finite", symbol="o" if len(points) <= 100 else None,
                                      symbolSize=4, symbolPen=None,
                                      symbolBrush=self._series_color(group, key))
@@ -372,12 +459,12 @@ class OverviewPage(QWidget):
             if key not in snap["series"]:
                 curve.setData([], [], symbol=None, symbolBrush=None)
         for group, panel in self.panels.items():
-            keys = [key for key, field in FIELD_MAP.items() if field.group == group]
+            keys = [key for key, field in self.fields.items() if field.group == group]
             observed = [key for key in keys if key in snap["series"]]
             visible = [key for key in observed if key not in self.hidden_fields]
-            panel.set_fields([(key, FIELD_MAP[key].label, key in visible) for key in observed])
+            panel.set_fields([(key, self.fields[key].label, key in visible) for key in observed])
             entries = [f'<span style="color:{self._series_color(group, key)}">'
-                       f'{html.escape(SHORT_NAMES.get(key, FIELD_MAP[key].label))}</span>' for key in visible]
+                       f'{html.escape(SHORT_NAMES.get(key, self.fields[key].label))}</span>' for key in visible]
             if group == "state":
                 self._render_states(snap, visible)
                 panel.set_legend("Separate rows · Numbers are raw codes, not magnitudes · Hover for receipts"
@@ -387,7 +474,7 @@ class OverviewPage(QWidget):
                 prefix = "⚠ Values outside held scale · " if panel.outside_scale else ""
                 panel.set_legend(prefix + (" · ".join(entries) or "No visible fields — choose Fields"))
             panel.plot.setToolTip(CHART_HELP)
-            panel.legend.setToolTip(", ".join(FIELD_MAP[key].label for key in visible))
+            panel.legend.setToolTip(", ".join(self.fields[key].label for key in visible))
             panel.plot.setLimits(xMin=snap["earliest"],
                                  xMax=max(snap["earliest"] + 1, snap["latest"]),
                                  minXRange=1)
@@ -409,25 +496,28 @@ class OverviewPage(QWidget):
             panel.plot.removeItem(annotation)
         self.state_annotations.clear()
         self.state_rows = {key: len(visible) - i - 1 for i, key in enumerate(visible)}
-        panel.plot.getAxis("left").setTicks([[(row, SHORT_NAMES.get(key, FIELD_MAP[key].label.replace(" (raw)", "")))
+        panel.plot.getAxis("left").setTicks([[(row, SHORT_NAMES.get(key, self.fields[key].label.replace(" (raw)", "")))
                                              for key, row in self.state_rows.items()]])
         panel.plot.setYRange(-.65, max(.65, len(visible) - .35), padding=0)
         panel.plot.setMinimumHeight(max(100, 28 * len(visible) + 36))
         palette = tokens(self.theme)
+        thinning = snap.get("thinning")
+        muted, danger = self._brush(palette["muted"]), self._brush(palette["danger"])
+        colors = [self._brush(colour) for colour in series_colors(self.theme)]
         for key in visible:
             points = snap["series"][key]
             row = self.state_rows[key]
-            x, values = plot_arrays(points)
+            x, values = plot_arrays(points, thinning)
             y = [row if math.isfinite(value) else float("nan") for value in values]
             error = "err" in key
-            colors = series_colors(self.theme)
-            brushes = [palette["muted"] if not math.isfinite(value) or value == 0 else
-                       palette["danger"] if error else colors[int(value) % len(colors)] for value in values]
+            brushes = [muted if not math.isfinite(value) or value == 0 else
+                       danger if error else colors[int(value) % len(colors)] for value in values]
             curve = self.curves[key]
             curve.setDownsampling(auto=False)
-            curve.setPen(pg.mkPen(palette["plot_axis"], width=1))
-            curve.setData(x, y, connect="finite", symbol="s", symbolSize=5,
-                          symbolPen=None, symbolBrush=brushes)
+            # The pen goes in with the data: setPen on its own redraws every
+            # symbol of the previous data first.
+            curve.setData(x, y, connect="finite", pen=pg.mkPen(palette["plot_axis"], width=1),
+                          symbol="s", symbolSize=5, symbolPen=None, symbolBrush=brushes)
             previous = None
             last_label = -math.inf
             separation = (snap["right"] - snap["left"]) * 36 / max(100, panel.plot.width() - 104)
@@ -436,7 +526,7 @@ class OverviewPage(QWidget):
                     previous = None
                     continue
                 changed = (previous is None or point["value"] != previous["value"]
-                           or point["segment"] != previous["segment"] or point["t"] - previous["t"] > 30)
+                           or gap(previous, point, thinning))
                 if changed and point["t"] - last_label >= separation:
                     annotation = pg.TextItem(sample_value(point["value"]), color=palette["plot_label"], anchor=(0, 1.3))
                     annotation.setPos(point["t"], row)
@@ -454,16 +544,19 @@ class OverviewPage(QWidget):
         view = self.panels[group].plot.getViewBox()
         left, right = view.viewRange()[0]
         tolerance = 6 * (right - left) / max(1, view.width())
+        thinning = self.window.snap.get("thinning")
         for key, points in self.window.snap["series"].items():
-            if FIELD_MAP[key].group != group or key in self.hidden_fields:
+            field = self.fields.get(key)
+            # Stored keys the session's registry does not chart have no panel.
+            if field is None or field.group != group or key in self.hidden_fields:
                 continue
-            sample = nearest_sample(points, seconds, edge_tolerance=tolerance)
+            sample = nearest_sample(points, seconds, edge_tolerance=tolerance, thinning=thinning)
             self.inspection[key] = sample
-            name = html.escape(FIELD_MAP[key].label)
+            name = html.escape(field.label)
             if sample is None:
                 rows.append(f"<tr><td>{name}</td><td colspan='2'>No comparable sample / gap</td></tr>")
             else:
-                value = f'{sample_value(sample["value"])} {FIELD_MAP[key].unit}'.strip()
+                value = f'{sample_value(sample["value"])} {field.unit}'.strip()
                 receipt = elapsed_text(sample["t"], 3)
                 quality = "" if sample["quality"] == "observed" else " · " + sample["quality"]
                 rows.append(f"<tr><td>{name}</td><td><b>{html.escape(value)}</b></td><td>{receipt}{html.escape(quality)}</td></tr>")
@@ -512,9 +605,11 @@ class OverviewPage(QWidget):
         """Recolour every existing curve; pens were baked in at creation time."""
         self.theme = theme
         for key, curve in self.curves.items():
-            curve.setPen(pg.mkPen(self._series_color(FIELD_MAP[key].group, key), width=1.7))
-            if FIELD_MAP[key].group != "state":
-                curve.setSymbolBrush(self._series_color(FIELD_MAP[key].group, key))
+            group = self.fields[key].group
+            # State rows take their pen and brushes from each render.
+            if group != "state":
+                curve.setPen(pg.mkPen(self._series_color(group, key), width=1.7))
+                curve.setSymbolBrush(self._series_color(group, key))
         pen = pg.mkPen(tokens(theme)["marker"], width=1, style=Qt.PenStyle.DotLine)
         for markers in self.markers.values():
             for marker in markers:

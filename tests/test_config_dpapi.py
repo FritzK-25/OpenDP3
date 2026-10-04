@@ -101,3 +101,72 @@ def test_dpapi_blob_from_a_different_protection_scope_fails_safely(tmp_path):
     path.write_text(json.dumps(values), encoding="utf-8")
     with pytest.raises(ValueError, match="Invalid configuration file"):
         load_config(path)
+
+
+# The DP3 user ID: with the serial the DP3 advertises to anyone in range, it is
+# the whole Bluetooth login proof, and it used to be the one account value
+# written in clear while the lower-value broker password was protected.
+PRIVATE_USER_ID = "9876543210123456789"
+
+
+def test_user_id_is_not_stored_in_plaintext_on_disk(tmp_path):
+    path = tmp_path / "config.json"
+    save_config(sample_config(user_id=PRIVATE_USER_ID), path)
+    raw = path.read_text("utf-8")
+    assert PRIVATE_USER_ID not in raw
+    stored = json.loads(raw)
+    assert stored["user_id"] == ""
+    assert stored["user_id_dpapi"]
+    assert load_config(path).user_id == PRIVATE_USER_ID
+
+
+def test_a_plaintext_user_id_still_loads_and_the_next_save_protects_it(tmp_path):
+    path = tmp_path / "config.json"
+    values = {"address": "AA:BB:CC:DD:EE:FF", "serial": "MR51123456789012",
+              "user_id": PRIVATE_USER_ID}
+    path.write_text(json.dumps(values), encoding="utf-8")
+    cfg = load_config(path)
+    assert cfg.user_id == PRIVATE_USER_ID
+    save_config(cfg, path)
+    assert PRIVATE_USER_ID not in path.read_text("utf-8")
+    assert load_config(path).user_id == PRIVATE_USER_ID
+
+
+def test_a_corrupt_user_id_blob_fails_safely(tmp_path):
+    path = tmp_path / "config.json"
+    values = {"address": "AA:BB:CC:DD:EE:FF", "serial": "MR51123456789012",
+              "user_id": "", "user_id_dpapi": "not-valid-base64-or-dpapi!!"}
+    path.write_text(json.dumps(values), encoding="utf-8")
+    with pytest.raises(ValueError, match="Invalid configuration file") as error:
+        load_config(path)
+    assert "DPAPI" not in str(error.value)
+
+
+def test_without_dpapi_the_user_id_stays_in_its_plain_field(tmp_path, monkeypatch):
+    # Every config needs a user ID, so a platform without DPAPI must still save
+    # one: there the file is its owner's alone instead.
+    from openpowerstation import config
+    monkeypatch.setattr(config, "_DPAPI_AVAILABLE", False)
+    path = tmp_path / "config.json"
+    save_config(sample_config(user_id=PRIVATE_USER_ID), path)
+    stored = json.loads(path.read_text("utf-8"))
+    assert stored["user_id"] == PRIVATE_USER_ID and "user_id_dpapi" not in stored
+    assert load_config(path).user_id == PRIVATE_USER_ID
+
+
+def test_without_dpapi_a_broker_password_still_saves(tmp_path, monkeypatch):
+    # Where DPAPI does not exist, protect() raises; that used to fail the whole
+    # save. The password is worth less than the user ID, so it gets the same
+    # owner-only file rather than no way to set up the bridge at all.
+    from openpowerstation import config
+
+    def no_dpapi(data):
+        raise OSError("DPAPI is only available on Windows")
+    monkeypatch.setattr(config, "_DPAPI_AVAILABLE", False)
+    monkeypatch.setattr(dpapi, "protect", no_dpapi)
+    path = tmp_path / "config.json"
+    save_config(sample_config(mqtt_password="PRIVATE_BROKER_PASSWORD"), path)
+    stored = json.loads(path.read_text("utf-8"))
+    assert stored["mqtt_password"] == "PRIVATE_BROKER_PASSWORD"
+    assert "mqtt_password_dpapi" not in stored
+    assert load_config(path).mqtt_password == "PRIVATE_BROKER_PASSWORD"

@@ -1,7 +1,6 @@
 """Public command line interface; credentials never appear in arguments."""
 import argparse
 import asyncio
-import contextlib
 from datetime import datetime
 import getpass
 import json
@@ -9,17 +8,44 @@ from pathlib import Path
 import sys
 import time
 
-import portalocker
-
 from .config import Config, data_dir, load_config, resolve_user_id, save_config
 
-# Consecutive Jackery reads that map to nothing before the BLE session is
-# dropped and reacquired. A station can answer with a status frame carrying no
-# dashboard field -- a settings page, a mode change, a firmware quirk -- and one
-# of those is not evidence the link is bad. Exiting the process on the first one
-# cost a supervisor restart plus a full rediscovery, a far longer outage than
-# the reattach below, and the EcoFlow collector has never behaved that way.
-UNMAPPED_READ_LIMIT = 5
+# Consecutive unproductive Jackery polls before the BLE session is dropped and
+# reacquired. A poll is unproductive when the station leaves the status query
+# unanswered, or answers without any of its core telemetry
+# (jackery_fields.JACKERY_CORE_KEYS) -- a settings page, a mode change, a
+# firmware quirk. Any mapped field used to count, so a station answering only
+# settings kept its session for ever while SOC and power aged out. One of either
+# is not evidence the link is bad, and reacquiring is the expensive step: the
+# station advertises only in short windows and may stop for hours once it
+# rejoins Wi-Fi. Five polls is about 15 seconds at the default rate, inside the
+# bridge's 30-second stale threshold. A GATT write that fails or misses its
+# deadline is evidence, and still reattaches at once. Exiting the process on
+# the first unmapped read once cost a supervisor restart plus a full
+# rediscovery, and the EcoFlow collector likewise rides out one silent round
+# before it reconnects.
+UNPRODUCTIVE_POLL_LIMIT = 5
+
+# While the station cannot be reached, how often the search is written to the
+# recording and the log: the first failed attach, and the first of any other
+# kind of failure, at once; otherwise one summary with the running count per
+# this many seconds. An absent Explorer is searched for about once a minute and
+# can stay away for hours, and a line per attempt would bury the rest of the log.
+ATTACH_REPORT_SECONDS = 600.0
+
+# The stop file each long-running worker watches in the data directory, by the
+# command that runs it. main() gives a run without --stop-file its name here;
+# Stop-OpenPowerstation.cmd writes all of them, start_all.py clears and passes them,
+# watchdog.py writes one to restart a single worker, and the HAOS app clears
+# those its children watch (home-assistant/opendp3/run.py). The DP3 bridge command has
+# no --stop-file: start_all.py runs that bridge in its own process and watches
+# bridge.stop for it. tests/test_stop_files.py holds every copy to these names.
+STOP_FILES = {
+    "record": "collector.stop",
+    "jackery-record": "jackery.stop",
+    "jackery-bridge": "jackery-bridge.stop",
+    "bridge": "bridge.stop",
+}
 
 def parser():
     p = argparse.ArgumentParser(description="OpenPowerstation — local DELTA Pro 3 and Jackery telemetry and control")
@@ -33,7 +59,8 @@ def parser():
     jackery_status.add_argument("--seconds", type=float, default=30)
     jackery_ble_record = subs.add_parser("jackery-record", help="Record and optionally control Jackery over local BLE (no account)")
     jackery_ble_record.add_argument("--database", type=Path)
-    jackery_ble_record.add_argument("--serial", required=True, help="15-digit Jackery serial (see jackery-scan)")
+    jackery_ble_record.add_argument("--serial", required=True,
+        help="The Explorer's 15-digit serial, as jackery-scan shows it; every other station is ignored")
     jackery_ble_record.add_argument("--interval", type=float, default=3)
     jackery_ble_record.add_argument("--hours", type=float)
     jackery_ble_record.add_argument("--stop-file", type=Path,
@@ -48,7 +75,8 @@ def parser():
         help="Actually delete the thinned frames; without this nothing is removed")
     jackery_bridge = subs.add_parser("jackery-bridge", help="Publish Jackery readings to Home Assistant over MQTT")
     jackery_bridge.add_argument("--database", type=Path)
-    jackery_bridge.add_argument("--serial", required=True, help="15-digit Jackery serial (see jackery-scan)")
+    jackery_bridge.add_argument("--serial", required=True,
+        help="The Explorer's 15-digit serial; only its recorded sessions are published")
     jackery_bridge.add_argument("--interval", type=float, default=1)
     jackery_bridge.add_argument("--once", action="store_true")
     jackery_bridge.add_argument("--stop-file", type=Path,
@@ -132,49 +160,157 @@ async def do_jackery_status(seconds=30):
     print(json.dumps(result, indent=2, sort_keys=True))
     return result
 
-async def _jackery_ble_loop(store, interval, hours, serial, stop_file, *, config_path=None):
+async def _jackery_ble_loop(store, interval, hours, serial, stop_file, *, config_path=None,
+                            discover=None):
+    """Record one Explorer until ``stop_file`` appears, ``hours`` pass or a failure.
+
+    ``discover`` opens a session with the station: jackery.discover_reader,
+    or a caller's wrapper of it, called as it is (timeout, serial=, lease=).
+    The HAOS app's worker passes one that first releases a link BlueZ still
+    holds (home-assistant/opendp3/linux_worker.py).
+    """
+    from collections import Counter
+    from . import control_queue
+    from .bridge import device_id
     from .config import control_allowed
-    from .jackery import (JACKERY_CONTROLS, discover_reader, jackery_control_readback_matches,
-                     jackery_control_value)
-    from .jackery_fields import PEAK_KEYS, map_properties
+    from .health import Thresholds, configured
+    from .jackery import (JACKERY_CONTROLS, StationSilent, discover_reader,
+                     jackery_control_readback_matches, jackery_control_value)
+    from .jackery_fields import JACKERY_CORE_KEYS, PEAK_KEYS, map_properties
     from .radio import RadioLease, radio_lock_path
     from .recorder import Compaction, Recorder
+    if discover is None:
+        discover = discover_reader
+    config_path = config_path or store.path.parent / "config.json"
+    # config.json's anomaly settings reach this recorder as they reach the
+    # DP3's. The Explorer needs no DP3 identity, so without a usable
+    # config.json it still records, by the defaults.
+    try:
+        health = configured(load_config(config_path))
+    except ValueError:
+        health = Thresholds()
+    loop = asyncio.get_running_loop()
     start = time.monotonic()
-    recorder = reader = None
-    unmapped_reads = 0
+    handle = device_id(serial)
+    # Opened before the station is found, as the EcoFlow collector opens its
+    # own: a search that lasts hours belongs to this recording. Opened on the
+    # first reading instead, a collector restarted while the Explorer was away
+    # left nothing behind for as long as it searched, and the bridge went on
+    # publishing the finished session before it as "stopped".
+    recorder = Recorder(store, firmware=f"Jackery Explorer 1000 v2 {serial}",
+                        conditions="Jackery local BLE transport",
+                        expected_interval=interval,
+                        # Keep everything: old ordinary frames are thinned
+                        # to one a minute rather than deleted outright.
+                        retain_days=None, health=health,
+                        compaction=Compaction(peak_keys=PEAK_KEYS))
+    reader = None
+    # The current run of unproductive polls, split by kind for the record.
+    silent_polls = incomplete_polls = 0
+    # The search under way while no session is open: when it began, its failed
+    # attaches by exception, and when it was last reported.
+    searching_since = start
+    failures = Counter()
+    reported = None
+    # Whether this session has delivered telemetry yet. The log names that
+    # change; the readings themselves are in the recording and on MQTT.
+    flowing = False
+    failed = False
+
+    def say(message):
+        """One add-on log line, naming the Explorer by its handle.
+
+        The same SHA-256 handle the bridges publish under. Detail passed up
+        from discovery can carry the serial, so it is replaced here rather than
+        left to every message to avoid.
+        """
+        print(str(message).replace(serial, handle), flush=True)
+
+    def search_cost():
+        attempts = sum(failures.values())
+        waited = f"{time.monotonic() - searching_since:.0f}s"
+        if not attempts:
+            return f"after {waited}"
+        tally = ", ".join(f"{kind}={count}" for kind, count in sorted(failures.items()))
+        return f"after {attempts} failed attempt{'' if attempts == 1 else 's'} in {waited} ({tally})"
+
+    def search_failed(exc, detail):
+        """Count one failed attach; report the first of each kind, then a summary."""
+        nonlocal reported
+        kind = type(exc).__name__
+        failures[kind] += 1
+        now = time.monotonic()
+        if (failures[kind] > 1 and reported is not None
+                and now - reported < ATTACH_REPORT_SECONDS):
+            return
+        reported = now
+        cost = search_cost()
+        # The Explorer not advertising, BlueZ refusing, the radio lease: which
+        # of them kept this gap open belongs in the recording, not only in the
+        # process log, and so does the search still running hours later.
+        recorder.event("connection_failed",
+                       f"Jackery BLE attach failed; exception={kind}; detail={detail}; "
+                       f"still searching {cost}.")
+        say(f"Explorer not reachable ({detail}); still searching {cost}.")
+
+    def attached():
+        """Record the session opening, and what the search before it cost."""
+        nonlocal reported, flowing
+        cost = search_cost()
+        # A segment boundary: frames after an outage start afresh.
+        recorder.event("connected", f"Jackery BLE session open {cost}.")
+        say(f"Attached to Jackery {handle} over local BLE {cost}.")
+        failures.clear()
+        reported = None
+        flowing = False
+
+    def read_now():
+        """The (UTC, monotonic) time a reply was read, which its frame carries."""
+        return time.time_ns(), time.monotonic_ns()
+
+    def keep(properties, measurements, read_at):
+        """Record one reply as the station sent it, with whatever it mapped to.
+
+        Stamped ``read_at``, when it was read, not when it is stored: a command
+        can run between the two, and a reading must never appear to come after
+        a command it preceded.
+        """
+        fields = {"device": {"serial": serial, "model": "Explorer 1000 v2", "transport": "ble"},
+                  "properties": properties}
+        raw = json.dumps(fields, ensure_ascii=False, sort_keys=True).encode()
+        utc_ns, mono_ns = read_at
+        recorder.ingest_observation(raw, fields, measurements, utc_ns=utc_ns, mono_ns=mono_ns,
+                                    quality="ble_observed")
 
     def finished():
         return ((hours is not None and time.monotonic() - start >= hours * 3600)
                 or bool(stop_file and stop_file.exists()))
 
     async def drain_controls(active_reader, active_recorder):
-        """Consume fresh Jackery control requests and verify each one by readback."""
-        directory = store.path.parent / "jackery-commands"
+        """Consume queued Jackery control requests and verify each one by readback.
+
+        Each readback is kept as a frame of its own, stamped when it was read,
+        whether or not it confirms the command: after a command the station
+        did not apply, its answer is the evidence of what it did instead.
+        """
+        directory = store.path.parent / control_queue.JACKERY_DIRECTORY
         if not directory.is_dir() or active_reader is None or active_recorder is None:
-            return None
-        latest_properties = None
-        now = time.time()
-        for path in sorted(directory.glob("*.json")):
-            request = None
-            try:
-                age = now - path.stat().st_mtime
-                request = json.loads(path.read_text("utf-8"))
-            except (OSError, ValueError):
-                age = None
-            try:
-                path.unlink()
-            except OSError:
-                pass
-            if not isinstance(request, dict):
-                continue
-            control, value = request.get("control"), request.get("value")
+            return
+        for entry in control_queue.drain(directory):
+            control, value = entry.key, entry.value
             if control not in JACKERY_CONTROLS:
                 active_recorder.event("control_refused", "Jackery unsupported control request.")
                 continue
-            if age is None or age > 30.0:
-                active_recorder.event("control_refused", f"Jackery {control}: request expired before it could be sent.")
+            if isinstance(entry, control_queue.Refusal):
+                active_recorder.event("control_refused", f"Jackery {control}: {entry.reason}.")
                 continue
-            allowed = control_allowed(config_path or store.path.parent / "config.json")
+            # Taken now, for this request alone: each one before it in this
+            # drain spent a write and a status readback on the radio.
+            lapsed = entry.lapsed()
+            if lapsed:
+                active_recorder.event("control_refused", f"Jackery {control}: {lapsed}.")
+                continue
+            allowed = control_allowed(config_path)
             active_reader.allow_control = allowed
             if not allowed:
                 active_recorder.event("control_refused", "Jackery control is turned off or setup is unavailable.")
@@ -182,125 +318,179 @@ async def _jackery_ble_loop(store, interval, hours, serial, stop_file, *, config
             try:
                 expected = jackery_control_value(control, value)
                 await active_reader.send_control(control, value)
+            except PermissionError as exc:
+                # Refused before the radio, by the reader's single-use
+                # authority or its write-site gate: nothing was sent.
+                active_recorder.event("control_refused", f"Jackery {control}: {exc}")
+                continue
+            except (ValueError, TimeoutError, ConnectionError, OSError) as exc:
+                active_recorder.event("control_unverified", f"Jackery {control}: {exc}")
+                continue
+            try:
                 properties = await active_reader.read(timeout=max(2.0, interval))
+                read_at = read_now()
+                keep(properties, map_properties(properties), read_at)
                 wire = JACKERY_CONTROLS[control]["wire"]
                 raw_readback = properties.get(wire)
                 if not jackery_control_readback_matches(control, value, raw_readback):
                     raise ConnectionError(f"status readback did not confirm {wire}={expected}")
                 active_recorder.event("control", f"Jackery {control}={value}; status confirmed.")
-                latest_properties = properties
             except (ValueError, TimeoutError, ConnectionError, OSError) as exc:
                 active_recorder.event("control_unverified", f"Jackery {control}: {exc}")
-        return latest_properties
 
-    due = asyncio.get_running_loop().time()
+    async def drop_session(event_detail, log_detail):
+        """Close the session and record why; the next pass rediscovers."""
+        nonlocal reader, silent_polls, incomplete_polls, searching_since
+        # A segment boundary: the frames either side are not contiguous.
+        recorder.event("disconnected", event_detail)
+        say(log_detail)
+        close_diagnostics = await reader.close()
+        for close_detail in close_diagnostics or ():
+            recorder.event(
+                "disconnect_error",
+                f"Jackery BLE cleanup failed; detail={close_detail}",
+            )
+        reader = None
+        silent_polls = incomplete_polls = 0
+        searching_since = time.monotonic()
+
+    async def wait_for_next_poll():
+        """Sleep to the next poll deadline, skipping any already missed.
+
+        Sleeping a fixed interval after a read makes the real period
+        read+interval and lets it drift; hold a deadline instead. A deadline
+        that has already passed -- a slow read, a control readback, a host
+        suspend -- is dropped rather than replayed, or the missed polls would
+        reach the station back to back.
+        """
+        nonlocal due
+        due = max(due + interval, loop.time())
+        await asyncio.sleep(max(0.0, due - loop.time()))
+
+    due = loop.time()
     try:
         while True:
-            connecting = reader is None
-            lease = (RadioLease(radio_lock_path(store.path.parent))
-                     if connecting else contextlib.nullcontext())
+            properties = None
             try:
-                # Serialize discovery, GATT setup, and the first property read.
-                # Healthy persistent sessions run concurrently afterward.
-                async with lease:
-                    if connecting:
-                        # The station advertises only in short windows, so attaching is
-                        # the expensive part. Hold the session once it is open and only
-                        # rediscover after it actually drops.
-                        reader = await discover_reader(60, serial)
-                        found = reader.identity.serial
-                        if found != serial:
-                            await reader.close()
-                            raise ValueError(
-                                f"Found Jackery {found} over BLE, not the requested {serial}."
-                            )
-                        print(f"Attached to Jackery {found} over local BLE.", flush=True)
-                    properties = await reader.read(timeout=max(2.0, interval))
+                if reader is None:
+                    # The station advertises only in short windows, so attaching is
+                    # the expensive part. Hold the session once it is open and only
+                    # rediscover after it fails, or stays unproductive (see
+                    # UNPRODUCTIVE_POLL_LIMIT).
+                    #
+                    # The search runs outside the shared adapter lease: it lasts up
+                    # to a minute at a time for as long as the station stays away,
+                    # which can be hours. Discovery takes the lease only to connect
+                    # once our Explorer has advertised. A poll on an open session,
+                    # the first one included, is the same GATT traffic a healthy
+                    # session sends beside the DP3's recovery, so it runs outside too.
+                    opened = await discover(
+                        60, serial=serial, lease=RadioLease(radio_lock_path(store.path.parent)))
+                    found = opened.identity.serial
+                    if found != serial:
+                        # discover_reader() ignores other Explorers, so only a
+                        # wrapper that lost the serial reaches this: a bug, not a
+                        # condition to retry against a neighbour's station.
+                        await opened.close()
+                        raise ValueError(
+                            f"Found Jackery {device_id(str(found))} over BLE, "
+                            f"not the requested {handle}."
+                        )
+                    reader = opened
+                    attached()
+                    # A new session starts a new schedule: the polls missed
+                    # while the link was down are not owed to the station.
+                    due = loop.time()
+                properties = await reader.read(timeout=max(2.0, interval))
+                read_at = read_now()
+            except StationSilent as exc:
+                # Nothing failed; the station did not answer this one query.
+                # Keep the session and poll again at the next deadline.
+                silent_polls += 1
+                reason = str(exc).strip()
+                say(f"Jackery left a status query unanswered ({silent_polls + incomplete_polls} "
+                    f"unproductive polls in a row): {reason}")
+                if silent_polls == 1:
+                    # Once per unproductive run, as the EcoFlow collector does.
+                    recorder.event("silence", f"Jackery left a status query unanswered; {reason}")
             except (asyncio.TimeoutError, ConnectionError, OSError) as exc:
                 detail = str(exc).strip() or type(exc).__name__
                 if reader is None:
-                    print(f"Explorer not reachable ({detail}); waiting for it to advertise.", flush=True)
+                    search_failed(exc, detail)
                     if finished():
                         break
                     await asyncio.sleep(interval)
-                    due = asyncio.get_running_loop().time()
                     continue
-                if recorder is not None:
-                    recorder.event(
-                        "disconnected",
-                        f"Jackery BLE session failed; exception={type(exc).__name__}; "
-                        f"detail={detail}; closing session and reattaching.",
-                    )
-                print(f"Local BLE session lost ({detail}); reattaching.", flush=True)
-                close_diagnostics = await reader.close()
-                if recorder is not None:
-                    for close_detail in close_diagnostics or ():
-                        recorder.event(
-                            "disconnect_error",
-                            f"Jackery BLE cleanup failed; detail={close_detail}",
-                        )
-                reader = None
+                await drop_session(
+                    f"Jackery BLE session failed; exception={type(exc).__name__}; "
+                    f"detail={detail}; closing session and reattaching.",
+                    f"Local BLE session lost ({detail}); reattaching.",
+                )
                 if finished():
                     break
                 continue
-            measurements = map_properties(properties)
-            if not measurements:
+            measurements = {} if properties is None else map_properties(properties)
+            productive = any(key in measurements for key in JACKERY_CORE_KEYS)
+            if properties is not None and not productive:
+                incomplete_polls += 1
+                reason = (f"Jackery answered over BLE without its core telemetry "
+                          f"({', '.join(JACKERY_CORE_KEYS)}); "
+                          f"{silent_polls + incomplete_polls} unproductive polls in a row.")
+                say(reason)
+                # Kept as the station sent it, and pinned so thinning never
+                # removes it or its context: the reply that explains an anomaly
+                # is exactly the one worth keeping.
+                keep(properties, measurements, read_at)
+                recorder.event("suspect_telemetry", reason, pin=True)
+            if not productive:
                 # Recoverable, like a dropped link: log it, keep the recording,
                 # and only reacquire once the station has done it repeatedly.
-                unmapped_reads += 1
-                detail = ("Jackery answered over BLE but returned no dashboard-mapped "
-                          f"properties ({unmapped_reads} in a row).")
-                print(detail, flush=True)
-                if recorder is not None:
-                    recorder.event("suspect_telemetry", detail)
-                if unmapped_reads >= UNMAPPED_READ_LIMIT:
-                    print("Reattaching after repeated unmapped Jackery reads.", flush=True)
-                    if recorder is not None:
-                        # A segment boundary: the frames either side are not contiguous.
-                        recorder.event("disconnected",
-                                       "Dropped the Jackery link after repeated unmapped reads.")
-                    await reader.close()
-                    reader = None
-                    unmapped_reads = 0
+                polls = silent_polls + incomplete_polls
+                if polls >= UNPRODUCTIVE_POLL_LIMIT:
+                    await drop_session(
+                        f"Jackery BLE session unproductive for {polls} polls in a row "
+                        f"({silent_polls} unanswered, {incomplete_polls} without core telemetry); "
+                        f"last={reason}; closing session and reattaching.",
+                        f"Reattaching after {polls} unproductive Jackery polls in a row.",
+                    )
                     if finished():
                         break
                     continue
                 if finished():
                     break
-                due += interval
-                await asyncio.sleep(max(0.0, due - asyncio.get_running_loop().time()))
+                await wait_for_next_poll()
                 continue
-            unmapped_reads = 0
-            if recorder is None:
-                recorder = Recorder(store, firmware=f"Jackery Explorer 1000 v2 {serial}",
-                                    conditions="Jackery local BLE transport",
-                                    expected_interval=interval,
-                                    # Keep everything: old ordinary frames are thinned
-                                    # to one a minute rather than deleted outright.
-                                    retain_days=None,
-                                    compaction=Compaction(peak_keys=PEAK_KEYS))
-            changed = await drain_controls(reader, recorder)
-            if changed:
-                properties.update(changed)
-                measurements = map_properties(properties)
-            fields = {"device": {"serial": serial, "model": "Explorer 1000 v2", "transport": "ble"},
-                      "properties": properties}
-            raw = json.dumps(fields, ensure_ascii=False, sort_keys=True).encode()
-            recorder.ingest_observation(raw, fields, measurements, quality="ble_observed")
-            print(json.dumps({"serial": serial, "measurements": measurements}, sort_keys=True), flush=True)
+            resumed = silent_polls + incomplete_polls
+            silent_polls = incomplete_polls = 0
+            # Stored before any queued command runs, so the frames and the
+            # control events land in the order they happened; each readback
+            # becomes a frame of its own (drain_controls).
+            keep(properties, measurements, read_at)
+            await drain_controls(reader, recorder)
+            # A line when telemetry starts or comes back, never one per poll:
+            # printed every poll, the readings were nearly all of the add-on
+            # log, and pushed the lines that explain an outage out of its view
+            # within minutes.
+            if not flowing:
+                core = " ".join(f"{key}={measurements[key]:g}"
+                                for key in JACKERY_CORE_KEYS if key in measurements)
+                say(f"Jackery telemetry flowing on this session: {core}.")
+            elif resumed:
+                say(f"Jackery telemetry resumed after {resumed} unproductive polls in a row.")
+            flowing = True
             if finished():
                 break
-            # Sleeping a fixed interval after a read makes the real period
-            # read+interval and lets it drift; hold a deadline instead.
-            due += interval
-            await asyncio.sleep(max(0.0, due - asyncio.get_running_loop().time()))
-    except KeyboardInterrupt:
-        print("Stopping; saving recording...", flush=True)
+            await wait_for_next_poll()
+    except Exception:
+        # Leaving on an exception is a failure, not an operator stop, and the
+        # recording has to say which one it was. An operator stop arrives as
+        # a cancellation, which is not an Exception; see do_jackery_record.
+        failed = True
+        raise
     finally:
         if reader is not None:
             await reader.close()
-        if recorder:
-            recorder.finish()
+        recorder.finish("error" if failed else "stopped")
 
 
 def do_jackery_compact(root, database, grace_hours=48, bucket_seconds=60, apply_changes=False):
@@ -331,8 +521,14 @@ def do_jackery_compact(root, database, grace_hours=48, bucket_seconds=60, apply_
     return summary
 
 
-def do_jackery_record(root, database, interval=3, hours=None, serial=None, stop_file=None):
-    """Record Jackery telemetry over local BLE, with no account and no cloud call."""
+def do_jackery_record(root, database, interval=3, hours=None, *, serial, stop_file=None,
+                      discover=None):
+    """Record Jackery telemetry over local BLE, with no account and no cloud call.
+
+    ``serial`` names the Explorer; there is no default station. ``discover``
+    is passed to _jackery_ble_loop; None means the package's own.
+    """
+    from .config import VIEWER_REFUSAL, install_role
     from .storage import Store
     if not 1 <= interval <= 3600:
         raise ValueError("Jackery BLE polling interval must be between 1 and 3600 seconds.")
@@ -340,13 +536,25 @@ def do_jackery_record(root, database, interval=3, hours=None, serial=None, stop_
         raise ValueError("A Jackery serial is required; run jackery-scan to find it.")
     if stop_file and stop_file.exists():
         raise ValueError("Stop file already exists; remove it before starting a new run.")
+    # Before the store and the radio, as runtime.Service does for the DP3.
+    # This collector needs no config.json, so it reads only the role.
+    if install_role(root / "config.json") != "collector":
+        raise ValueError(VIEWER_REFUSAL)
     target = database or root / "jackery.sqlite"
     # Take the writer lock before touching the radio, so a duplicate invocation
     # fails instead of competing for the station's single BLE client slot.
     with Store(target) as store:
         print(f"Recording Jackery telemetry over local BLE to {target.resolve()}; Ctrl+C to stop.", flush=True)
-        asyncio.run(_jackery_ble_loop(store, interval, hours, serial, stop_file,
-                                     config_path=root / "config.json"))
+        try:
+            asyncio.run(_jackery_ble_loop(store, interval, hours, serial, stop_file,
+                                         config_path=root / "config.json", discover=discover))
+        except KeyboardInterrupt:
+            # Ctrl+C, or the SIGINT the add-on supervisor stops a collector
+            # with. asyncio.run cancels the loop, which closes the session and
+            # saves the recording on its way out, then raises this. It is an
+            # ordinary stop; left uncaught it ended every lease restart and app
+            # stop in a traceback that read as a crash.
+            print("Stopped; Jackery recording saved.", flush=True)
 
 
 def setup(root, login):
@@ -394,7 +602,11 @@ def desktop_component(module, attribute):
             "installed. Install the desktop extra: pip install 'openpowerstation[gui]'"
         ) from None
 
-def main(argv=None):
+def main(argv=None, *, scan=None, discover=None):
+    """Run one command. ``scan`` and ``discover`` replace how the record and
+    jackery-record collectors find their station -- ble.scan and
+    jackery.discover_reader when None. The HAOS app's worker passes wrappers
+    that first release a link BlueZ still holds."""
     args = parser().parse_args(argv)
     root = args.data_dir
     # A run started by hand (not through start_all.py / Start-OpenPowerstation.cmd) that
@@ -403,10 +615,9 @@ def main(argv=None):
     # explicitly. Defaulting to them here means Stop-OpenPowerstation.cmd reaches a
     # manual invocation too, instead of it lingering forever holding the
     # writer lock. See jackery.sqlite.writer.lock incident, 2026-09-04.
-    default_stop_files = {"record": "collector.stop", "jackery-record": "jackery.stop",
-                           "jackery-bridge": "jackery-bridge.stop"}
-    if args.command in default_stop_files and args.stop_file is None:
-        args.stop_file = root / default_stop_files[args.command]
+    # Only commands with a --stop-file option have the attribute at all.
+    if getattr(args, "stop_file", False) is None:
+        args.stop_file = root / STOP_FILES[args.command]
     try:
         if args.command == "scan":
             asyncio.run(do_scan(args.seconds))
@@ -417,7 +628,8 @@ def main(argv=None):
         elif args.command == "jackery-record":
             if args.hours is not None and args.hours <= 0:
                 raise ValueError("Recording hours must be positive.")
-            do_jackery_record(root, args.database, args.interval, args.hours, args.serial, args.stop_file)
+            do_jackery_record(root, args.database, args.interval, args.hours, serial=args.serial,
+                              stop_file=args.stop_file, discover=discover)
         elif args.command == "jackery-compact":
             do_jackery_compact(root, args.database, args.grace_hours,
                                args.bucket_seconds, args.apply)
@@ -446,7 +658,8 @@ def main(argv=None):
             cfg = load_config(root/"config.json")
             database = args.database or root/"recordings.sqlite"
             service = Service(cfg,database,config_path=root/"config.json",
-                              notify=lambda s:print(f"{s['state']}: {s['detail']}",flush=True))
+                              notify=lambda s:print(f"{s['state']}: {s['detail']}",flush=True),
+                              scan=scan)
             service.start()
             deadline = None
             startup_deadline = time.monotonic()+300
@@ -495,7 +708,7 @@ def main(argv=None):
             target = args.database or root/"demo"/(datetime.now().strftime("%Y%m%d-%H%M%S")+".sqlite")
             print(make_demo(target).resolve())
         elif args.command == "bridge":
-            from .bridge import Bridge, bridge_lock, describe
+            from .bridge import Bridge, describe
             cfg = load_config(root/"config.json")
             database = args.database or root/"recordings.sqlite"
             if args.interval is not None and not 1 <= args.interval <= 3600:
@@ -503,13 +716,12 @@ def main(argv=None):
             if args.dry_run:
                 describe(cfg,database)
             else:
+                # run() takes the single-instance lock, and refuses with a
+                # ValueError while another bridge holds it.
                 try:
-                    with bridge_lock(database):
-                        worker = Bridge(cfg,database,interval=args.interval)
-                        print(f"Publishing to the configured broker every {worker.interval:g}s. Ctrl+C to stop.",flush=True)
-                        worker.run(once=args.once)
-                except portalocker.exceptions.LockException:
-                    raise ValueError("A bridge is already publishing; stop it before starting another.") from None
+                    worker = Bridge(cfg,database,interval=args.interval)
+                    print(f"Publishing to the configured broker every {worker.interval:g}s. Ctrl+C to stop.",flush=True)
+                    worker.run(once=args.once)
                 except KeyboardInterrupt:
                     print("Stopping; marking the device offline...")
         elif args.command == "gui":

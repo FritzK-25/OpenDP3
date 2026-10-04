@@ -52,6 +52,25 @@ keep it private and never commit it. Fields:
 - Use a broker account created only for this, so the stored password grants
   nothing else.
 
+### Keeping existing entity IDs
+
+Home Assistant creates each entity under the ID discovery suggests, such as
+`sensor.opendp3_bms_batt_soc`. If your entities already carry other IDs (for
+example ones Home Assistant derived from their names), put an `entity_ids.json`
+beside `import.json` naming them, keyed by device and discovery key:
+
+```json
+{
+  "dp3": {"bms_batt_soc": "sensor.my_battery_soc"},
+  "jackery": {"bms_batt_soc": "sensor.my_explorer_soc"}
+}
+```
+
+An entity Home Assistant creates again (after deleting the device, or
+re-adding the MQTT integration) then lands back on the ID your dashboards and
+automations use. The file changes no entity that already exists. The app
+refuses to start if the file is malformed.
+
 ## App options
 
 | Option | Default | Meaning |
@@ -68,6 +87,35 @@ output and battery-saving commands, only while the collector holds a live
 Bluetooth session, and it rejects retained MQTT commands. Everything else is
 refused before it reaches the radio. See
 [Security and evidence trust](https://github.com/FritzK-25/OpenPowerstation/blob/main/docs/SECURITY.md).
+
+## How it runs
+
+The app starts the MQTT publishers first, then the Bluetooth collectors, each
+as its own process:
+
+```text
+ecoflow-mqtt      -> read-only recordings.sqlite -> MQTT
+ecoflow-collector -> BLE -> recordings.sqlite
+
+jackery-mqtt      -> read-only jackery.sqlite -> MQTT
+jackery-collector -> BLE -> jackery.sqlite
+```
+
+The publishers never open Bluetooth, and the collectors never wait on MQTT to
+keep recording. A control request goes the other way, through a file queue
+beside the recording: the publisher validates the MQTT message and writes the
+request; the collector checks the policy again immediately before the radio
+write. A request is valid for 30 seconds, at most 64 wait per device, repeated
+presses of one control coalesce to the newest, and anything still queued when
+the app starts is discarded rather than sent.
+
+The Jackery's serial comes only from the `jackery_serial` option and is passed
+to both its collector and its publisher. Discovery connects only to that
+serial, so another Explorer in range is never opened.
+
+On a stop the app asks every worker to stop at once and gives them 40 seconds
+together to close their Bluetooth links and recordings, inside the
+Supervisor's 60-second stop timeout.
 
 ## Connection recovery
 
@@ -86,6 +134,16 @@ same targeted cleanup. No code path resets or powers down the whole adapter.
 Discovery and authentication take a short lease scoped to the selected adapter,
 so two batteries sharing one radio do not scan at the same time. Healthy
 connections run concurrently after the lease is released.
+
+The targeted cleanup helps rediscovery but never blocks it. If BlueZ refuses,
+errors, or takes more than 12 seconds, the log says
+`BlueZ orphan check for EcoFlow skipped (<error type>); discovering anyway.`
+(or `for Jackery`) once, and `... working again.` when it next succeeds. The
+one exception is two connected BlueZ devices that both match the configured
+Jackery: the app cannot tell which link is its own, so that attempt is refused
+and retried. The Jackery waits for its advertisement outside the adapter
+lease, because it may not advertise for hours, and no holder keeps the lease
+for more than 60 seconds.
 
 ## Backup and rollback
 

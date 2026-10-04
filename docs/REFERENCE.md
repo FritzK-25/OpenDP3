@@ -13,7 +13,8 @@ or Jackery Explorer 1000 v2 reports over Bluetooth.
   Home Assistant. EcoFlow setup needs your account's numeric user ID.
 - **Share useful evidence:** export charts and readings to help explain a problem.
 - **Optionally connect Home Assistant:** show readings there and, if you turn
-  on Allow control, switch supported outputs or change Jackery's Battery Saving Mode or screen timeout.
+  on Allow control, switch supported outputs or change Jackery's Battery Saving Mode, screen
+  timeout, charging mode or Auto Power-Off timer.
 
 The app records what the battery tells it. It cannot prove why a problem happened,
 and it is not a safety alarm or a replacement for the battery's own protections.
@@ -95,9 +96,10 @@ The requirements.lock file pins the tested Windows environment. On another
 platform, install with pip install -e ".[gui,test,test-gui]" instead; Linux hardware is not qualified.
 
 The desktop packages are optional extras, so plain pip install -e . gives the
-headless collectors, bridges and CLI without Qt -- which is what the Home
-Assistant add-on installs. Add ".[gui]" for the desktop window, or ".[charts]"
-on a headless box that only needs openpowerstation export to render evidence.
+headless collectors, bridges and CLI without Qt -- the same core set the Home
+Assistant add-on installs, from its hashed lock in home-assistant/opendp3. Add ".[gui]"
+for the desktop window, or ".[charts]" on a headless box that only needs
+openpowerstation export to render evidence.
 
 1. Choose **File → Create synthetic demonstration** to explore the interface.
    Synthetic and device recordings use different databases.
@@ -117,7 +119,10 @@ on a headless box that only needs openpowerstation export to render evidence.
 ### The viewer
 
 The sidebar holds six destinations. **Overview** carries the headline readings,
-the four aligned charts and playback. **Live telemetry** lists every mapped
+the aligned charts and playback: one chart for each kind of reading the
+session's device records, the same set the evidence export draws — four for a
+DP3, and for an Explorer also AC voltage, frequency and estimated time.
+**Live telemetry** lists every mapped
 field with its age and cadence, beside the decoded frame at the cursor.
 **Incidents** shows protected retention windows and the full event timeline.
 **Exported files** lists evidence bundles this viewer wrote to its default
@@ -213,7 +218,8 @@ guarantee useful temperature, power, or error coverage.
 - The application logs every received post-authentication protocol frame at the
   native update cadence. By default it sends no device commands after
   authentication; **Settings → Allow control** enables only the documented,
-  allowlisted output, Battery Saving Mode, and Jackery screen-timeout commands. There is
+  allowlisted output, Battery Saving Mode, and Jackery screen-timeout, charging-mode and
+  Auto Power-Off commands. There is
   no guarantee that the device exposes every BMS sensor, reports all changes,
   or continues publishing without app-like clock/configuration exchanges.
 - Each protobuf packet is decoded independently. Absent values never become
@@ -259,40 +265,52 @@ numeric value of `36` is not automatically the display's **Error 036**.
 
 ### Complete OpenPowerstation timeline-event catalog
 
-The following 18 strings are recognized by the recorder/export path. Seventeen
-have production emission paths; `capture_error` is reserved as described
-below. The desktop displays spaces in place of underscores; SQLite and CSV
-retain the exact identifiers.
+The following 24 strings are recognized by the recorder/export path, the
+export allowlist in [events.py](../src/openpowerstation/events.py). All but
+`capture_error` have production emission paths; `capture_error` is reserved as
+described below. Some come from one collector only, as the table says. The
+desktop displays spaces in place of underscores; SQLite and CSV retain the
+exact identifiers.
 
 “New segment” means subsequent comparisons do not cross this boundary.
 “Pins incident” means the event requests protection for five minutes before
-and after its receipt time. Neither property establishes the battery's state.
+and after its receipt time; “30 days” marks a collector pin, whose protection
+lapses (see [Incident protection](#incident-protection-is-separate-from-event-logging)).
+Neither property establishes the battery's state.
 
 | Identifier | Origin / trigger | New segment | Pins incident |
 |---|---|:---:|:---:|
-| `connected` | Local BLE authentication completed | Yes | No |
-| `disconnected` | Collector connection/session attempt ended with a recoverable failure | Yes | Yes |
+| `connected` | DP3: local BLE authentication completed. Jackery: a session to the configured Explorer opened, with what the search before it cost | Yes | No |
+| `disconnected` | DP3: an authenticated session ended with a recoverable failure; the detail starts with its [`reason=`](#collector_reason--why-telemetry-stopped). Jackery: its session was closed for reattaching | Yes | Yes, 30 days |
 | `released` | User explicitly released this collector's Bluetooth session | Yes | No |
-| `silence` | BLE receive loop timed out waiting 30 seconds for a complete protocol frame | Yes | No |
+| `silence` | DP3: BLE receive loop timed out waiting 30 seconds for a complete protocol frame. Jackery: a status query went unanswered on an open session | Yes | No |
 | `telemetry_resumed` | First complete frame after a reported silence | Yes | No |
 | `session_timeout` | Receive loop reached the consecutive-silence limit and ended the session itself | Yes | No |
-| `session_error` | A BLE session ended on a transport exception rather than on silence | Yes | No |
+| `session_error` | A BLE session ended on a transport exception rather than on silence, a DP3 session ended itself after ten undecodable frames in a row, or a DP3 connection attempt was cut off at the adapter lease's hold limit | Yes | No |
 | `session_lease_expired` | No decoded, measurement-bearing frame arrived within the session's valid-frame lease | Yes | No |
-| `disconnect_error` | Bounded session cleanup timed out or raised while stopping notifications or disconnecting | Yes | No |
-| `corrupt_transport` | Post-authentication framing discarded bytes, or a delivered frame failed validation | Yes | Yes |
-| `host_suspend` | Recorder loop observed a scheduling interval greater than 10 seconds | Yes | Yes |
+| `disconnect_error` | Bounded session cleanup timed out or raised while disconnecting, or (Jackery) stopping notifications | Yes | No |
+| `corrupt_transport` | Post-authentication framing discarded bytes, or a delivered frame failed validation | Yes | Yes, 30 days |
+| `capture_gap` | DP3: the receive queue was full and notifications were dropped while the collector was not reading; the detail gives how many. Jackery: no observation for more than four poll intervals, or 15 seconds if that is longer | Yes | Jackery only, 30 days |
+| `host_suspend` | The host was suspended during a recorder-loop interval greater than 10 seconds | Yes | Yes, 30 days |
+| `loop_stall` | The recorder loop did not run for more than 10 seconds while the host stayed awake; at most one per 10 minutes | No | No |
 | `capture_error` | Reserved capture-failure category; not currently emitted automatically | Yes, if supplied | Yes, if supplied |
-| `connection_failed` | Authentication or outgoing-message policy rejected the connection attempt | No | No |
-| `suspect_telemetry` | A comparable, nonduplicate temperature observation crossed the configured jump threshold | No | Yes |
+| `connection_failed` | DP3: a connection attempt failed before authenticating and is retried, or authentication or the outgoing-message policy refused it and collection stops; the detail starts with its [`reason=`](#collector_reason--why-telemetry-stopped). Jackery: an attach failed -- the Explorer not advertising, or a BlueZ or radio-lease error -- and is being retried; the first of each kind at once, then one summary per 10 minutes | No | No |
+| `suspect_telemetry` | Either battery, by the same rules: a comparable, nonduplicate temperature observation crossed the configured jump threshold, a battery temperature read outside −20…60 °C, or the state of charge moved 5 % or more within 10 seconds. Jackery: also its AC-output rules, and a reply carrying none of its core telemetry (SOC, input and output power), kept as a frame | No | Yes |
 | `device_error` | An observed error field became nonzero or changed to another nonzero value | No | Yes |
-| `state_change` | One of three supported raw state fields changed after an earlier comparable observation | No | No |
+| `unmapped_change` | Jackery: a property with no verified mapping took a value not seen before in this session | No | Yes, until that property has shown 32 values |
+| `state_change` | One of three supported raw state fields, or the outlet state of a DP3 AC output, changed after an earlier comparable observation | No | No |
 | `clock_change` | UTC receipt-time advancement differed from monotonic advancement by more than 2 seconds between frames | No | No |
+| `control` | An allowlisted DP3 control left the radio, or a Jackery control was confirmed by status readback | No | No |
+| `control_refused` | A control request was refused before reaching the radio: control off, no live session, the request too old, dated later than the clock or superseded by a newer one, not on the allowlist, or (DP3) not the guarded payload | No | No |
+| `control_unverified` | A control write failed, so whether it changed the device is unknown: the DP3's Bluetooth write, or a Jackery write or the status readback that confirms it | No | No |
 | `manual` | User added a private incident marker/note | No | Yes |
 
 Implementation sources: [BLE receiver](../src/openpowerstation/ble.py),
 [collection service](../src/openpowerstation/runtime.py), [recorder](../src/openpowerstation/recorder.py),
-and [export allowlist](../src/openpowerstation/exporting.py). The database accepts a string
-category rather than enforcing a closed EcoFlow enum.
+[Jackery health rules](../src/openpowerstation/jackery_health.py), [Jackery recording
+loop](../src/openpowerstation/cli.py) and [export allowlist](../src/openpowerstation/exporting.py). The
+database accepts a string category rather than enforcing a closed EcoFlow enum.
+`tests/test_readme_reference.py` fails when this table and the code disagree.
 
 #### `connected` — authenticated BLE session
 
@@ -301,22 +319,29 @@ when a device advertisement is discovered or a GATT link opens. A reconnect
 within the same recording produces another `connected` event and a new
 comparison segment. Typical detail: “Authenticated local Bluetooth session.”
 
+The Jackery collector emits it each time its session to the configured Explorer
+opens, with what the search before it cost: “Jackery BLE session open after 14
+failed attempts in 843s (StationNotFound=14).”
+
 It does not mean the battery is charging, outputs are enabled, all fields are
 available, or its sensors are correct. Confirm Coverage and measurement age.
 
 #### `disconnected` — communication unavailable
 
-Emitted by the collector when a connection/session task fails outside the
-special authentication/policy or storage-failure paths. It can also occur
-when the configured DP3 cannot be found during a reconnect scan; therefore
-the label does not prove there was a successful connection immediately before
-it. The details identify a transport failure or exception class, without
-copying arbitrary device/account payloads.
+Emitted by the DP3 collector when a session that had authenticated ends,
+outside the special authentication/policy or storage-failure paths. An attempt
+that never authenticated -- the DP3 not advertising, the adapter lease busy, a
+BlueZ error -- lost no link and is recorded as `connection_failed` instead, so
+this label does mean a connection existed immediately before it. The detail
+begins with the [reason](#collector_reason--why-telemetry-stopped) and names the
+exception class, without copying arbitrary device/account payloads:
+“reason=link_lost; Bluetooth session ended (ConnectionError); device state is
+unknown.”
 
-It breaks comparisons, protects an incident, and normally leads to reconnect
-attempts with delays of 2, 4, 8, 16, 32, then at most 60 seconds. A successful
-authentication resets the delay. Causes could include range, interference,
-another BLE client, an unavailable device, or host/driver problems. The event
+It breaks comparisons, protects an incident for 30 days, and normally leads to reconnect
+attempts with delays of 2, 4, 8, 16, 32, then at most 60 seconds. Only a
+session that delivers measurements resets the delay. Causes could include range,
+interference, another BLE client, an unavailable device, or host/driver problems. The event
 does **not** establish a battery shutdown, restart, or BMS trip. Normal Stop
 and intentional Release do not deliberately emit this category.
 
@@ -350,6 +375,14 @@ by itself; use a manual marker if you want its surrounding history protected.
 It also does not by itself identify BlueZ or the battery as the cause; the
 `session_timeout` event says whether any transport exception was observed.
 
+The Jackery collector emits `silence` when a status query goes unanswered, or
+its notifications never decode, on a session whose write raised nothing -- once
+per run of unproductive polls, with the same `transport_error=none_observed`
+detail. It polls again on the same session at the next deadline; five
+unproductive polls in a row (unanswered, and answered without core telemetry,
+counted together) end the session as `disconnected`, naming how many of each
+there were.
+
 #### `session_timeout` — repeated DP3 notification silence
 
 Emitted after two consecutive 30-second receive timeouts. It records the Bleak
@@ -366,6 +399,22 @@ supervision. It is not emitted for the silence teardown above, which has
 already recorded its own more specific reason. It never records packets,
 session keys, or the user id.
 
+The DP3 session also ends itself, with `operation=frame_decode` and
+`consecutive_undecodable=10`, when ten frames in a row pass the transport
+checksum but do not decode as DP3 packets. Such a run means the session key no
+longer matches the device's, after another client's session for instance, and
+only a new handshake recovers; the frames themselves are kept as
+`invalid_packet`. The session used to run on until the valid-frame lease below
+ended it, about 80 seconds of frames at the DP3's rate.
+
+A DP3 connection attempt still discovering or authenticating when the shared
+adapter lease reaches its 60-second hold limit is cancelled, so that a GATT
+call that never returns cannot keep the Jackery collector off the radio.
+Nothing inside a cancelled attempt raises, so the collector records this event
+itself, with `backend=runtime`, `operation=connect`,
+`exception=LeaseHoldExpired` and the `stage` the attempt had reached
+(`scanning` or `authenticating`).
+
 #### `session_lease_expired` — decoded frames stopped arriving
 
 An independent 75-second lease is renewed only by a decoded frame that carries
@@ -374,11 +423,20 @@ measurement-free, and repeated frames cannot hold a stalled session open.
 Expiry cancels the whole session task, including an operation that the
 ordinary notification timeout does not cover.
 
+The detail says what arrived instead since the last measurement, the three
+most frequent first: “212 frames since the last measurement: unknown_message
+02/FE/16 x198, invalid_packet x12, repeated_unverified 02/FE/15 x2”, or “no
+frames since the last measurement”. Each entry is a frame status (or
+`decoded_unmapped`, a decoded upload carrying no mapped field) and the route
+(source/command set/command id), so housekeeping traffic, a session key that
+no longer matches, and retransmits can be told apart afterwards.
+
 #### `disconnect_error` — bounded cleanup failed
 
-Records a timeout or backend exception raised while stopping notifications or
-disconnecting. Cleanup is bounded, so a cleanup that cannot finish is reported
-rather than allowed to block the next recovery attempt.
+Records a timeout or backend exception raised while disconnecting, or, on the
+Jackery, while stopping notifications first; the DP3 session only disconnects.
+Cleanup is bounded, so a cleanup that cannot finish is reported rather than
+allowed to block the next recovery attempt.
 
 #### `telemetry_resumed` — frames returned after silence
 
@@ -391,10 +449,16 @@ reply that is subsequently excluded. It is not a device reboot indication.
 #### `corrupt_transport` — unusable transport data
 
 There are two paths. The stream reassembler can discard invalid framing or
-checksum bytes and report the discard after authentication. Separately, a
+checksum bytes and report the discard after authentication. It moves on a
+byte at a time, and gives up a header still waiting for its length as soon as
+a complete, checksum-valid frame starts inside it, so a notification fragment
+lost mid-frame costs that frame alone. Separately, a
 complete post-authentication frame delivered to the recorder can fail packet
 validation; that frame is first committed locally and then marked
-`invalid_packet`. Both paths clear comparison history and pin an incident.
+`invalid_packet`. Both paths clear comparison history and pin an incident for
+30 days. The second path records one event for a run of such frames, not one
+for each: every frame is kept, and the next decodable frame or new segment
+starts another run. Ten in a row end the session as a `session_error`, below.
 
 **Preservation limit:** discarded fragments in the transport reassembler are
 not a wireless packet capture and are not retained individually. The raw store
@@ -405,11 +469,31 @@ is sufficient to attribute corruption to EcoFlow firmware.
 
 #### `host_suspend` — host collection gap
 
-The collector checks its scheduling interval on its roughly 0.2-second loop.
-An interval **greater than 10 seconds** produces this event, breaks comparison
-history, and pins an incident. Sleep is one possible explanation; a blocked or
-delayed process can look similar. OpenPowerstation does not read a definitive Windows
-sleep/resume event here and cannot prove the host slept from this label alone.
+The collector checks its scheduling interval on its roughly 0.2-second loop
+against two clocks: one that stops while the host is suspended and one that
+does not (`CLOCK_MONOTONIC` and `CLOCK_BOOTTIME` on Linux; unbiased interrupt
+time and the tick count on Windows). An interval **greater than 10 seconds** in
+which the host spent at least one second suspended produces this event, breaks
+comparison history, and pins an incident for 30 days. The detail gives the time asleep and
+the whole gap. The clocks show that the host was suspended, not why; OpenPowerstation
+does not read an operating-system sleep/resume notification. On any other
+platform the two clocks are the same and this event is never recorded.
+
+#### `loop_stall` — collector loop blocked while awake
+
+An interval **greater than 10 seconds** in which the host did not sleep means
+the collector's own loop did not run: a slow storage pass, a blocked call, or
+an overloaded host. BLE notifications queue meanwhile, so no frame is lost
+unless more than 2,048 arrive. Those past the limit are dropped and recorded
+as one `capture_gap` at the point in the stream where they were lost, which
+starts a new comparison segment; the session carries on, and a link that drops
+during a stall ends it only after everything already received is recorded.
+Frames received during the stall carry late receipt times.
+This is a diagnostic: it neither breaks comparison history nor pins an
+incident. The detail gives the stall length and how long the last storage
+maintenance pass took. At most one is recorded per 10 minutes of awake time;
+the next one says how many were counted in between. Before this distinction,
+such stalls were recorded as `host_suspend`.
 
 #### `capture_error` — recognized, reserved category
 
@@ -423,25 +507,72 @@ cannot be written, a final event row cannot be promised. Check application
 health and session status rather than expecting a `capture_error` row for
 every failed capture.
 
-#### `connection_failed` — authentication/policy refusal
+#### `capture_gap` — observations lost or late
 
-Emitted for an `AuthenticationError` or `PolicyError`, such as unsupported
-advertised authentication, rejection of the account/device combination, or
-an outgoing message blocked by the control allowlist. Collection stops with
-an error rather than retrying an authentication bypass or using cloud data.
+On the DP3, notifications that arrive while the receive queue is full -- the
+collector's loop not reading, as in a [`loop_stall`](#loop_stall--collector-loop-blocked-while-awake)
+-- are dropped and recorded as one `capture_gap` at the point in the stream
+where they were lost, with how many. It starts a new comparison segment but
+does not pin an incident, and the session carries on.
 
-The event does not pin an incident. Adapter errors, discovery failures and
-other connection exceptions may follow a different path; not every failure
-to connect produces this exact category. Review the displayed reason.
+The Jackery recorder expects one observation per poll. When the next one
+arrives more than four poll intervals after the last, or more than 15 seconds
+if that is longer, it records this event with the gap length, starts a new
+segment and pins an incident whose protection lapses after 30 days. It is
+judged when the late observation arrives, so a recording that simply stops has
+no closing `capture_gap`. The gap itself does not say whether the link, the
+station or the host was at fault.
 
-#### `suspect_telemetry` — temperature jump candidate
+#### `connection_failed` — a connection attempt that did not authenticate
 
-For each mapped temperature field, the default rule is:
+The DP3 collector emits it for every connection attempt that ends before
+authenticating, with the [reason](#collector_reason--why-telemetry-stopped),
+the exception and the stage the attempt reached: “reason=not_advertising;
+backend=runtime; operation=connect; exception=CollectionEnded: Configured DP3
+is not advertising.; stage=scanning”. Nothing was connected, so it neither
+starts a segment nor pins an incident; these used to be recorded as
+`disconnected`, with the cause discarded and a pinned window each time. The
+collector retries under its backoff.
+
+For an `AuthenticationError` or `PolicyError` -- unsupported advertised
+authentication, rejection of the account/device combination, or an outgoing
+message blocked by the allowlist -- collection stops with an error rather than
+retrying an authentication bypass or using cloud data. The detail is the
+reason and the displayed error: “reason=authentication_rejected; Device
+rejected authentication. Verify account binding and user ID.”
+
+The Jackery collector also emits it, without stopping, when an attach fails: the
+Explorer not advertising (`StationNotFound`), a BlueZ error (a refused or aborted
+connection, a scan that will not start), or the shared radio lease. The detail
+names the exception, the backend and operation where there is one, and the search
+so far: how many attempts have failed, of which kinds, over how long. The
+collector retries in process. The first failure of each kind is recorded at once
+and repeats are summarised once per 10 minutes, so a search that lasts hours
+leaves a trace without an event a minute. The `connected` event that ends the
+search says what it cost.
+
+#### `suspect_telemetry` — temperature or charge discontinuity
+
+Three rules, run identically for the DP3 and the Jackery
+([`health.py`](../src/openpowerstation/health.py)); each device names which of its fields
+each rule reads. For every mapped temperature field, with the default settings:
 
     absolute(new_value - previous_value) >= 10 degrees Celsius
     AND 0 < monotonic_receipt_delta <= 5 seconds
-    AND current quality == observed
     AND the packet is not a recognized duplicate
+
+For the battery temperatures -- the DP3's `bms_max_cell_temp`,
+`bms_min_cell_temp` and `cms_batt_temp`, and the Jackery's `cms_batt_temp` --
+also a reading outside −20…60 °C, the band a sensor failing to a rail lands
+outside of. It fires once per value: a sensor stuck at one number writes one
+event, not one per frame, while a reading still moving outside the band keeps
+being flagged. The MOS temperatures run hotter than a cell under load, so only
+the jump rule watches them.
+
+For state of charge -- the DP3's `bms_batt_soc` and `cms_batt_soc`, the
+Jackery's `cms_batt_soc` -- a move of 5 % or more within 10 seconds of receipt
+time, faster than either battery can charge or discharge: a BMS recalibration
+or a sensor fault.
 
 The comparison is between the same field and the last eligible observation,
 not between minimum and maximum sensors or between the main and extra
@@ -450,14 +581,25 @@ boundaries clear the history. The first value in a segment is a baseline,
 and a comparison older than the time window does not trigger. Comparisons use
 the original numeric values, not the rounded values on the cards.
 
-Configure the jump and time window in setup. The settings apply when starting
-a collector; old sessions and existing incident records are not silently
-reclassified. Unverified extra-battery temperatures do not enter this rule.
-A legitimate zero is allowed; zero alone is not an anomaly. An abrupt return
-from a low value can create another event and extend the same incident.
+Configure the jump and time window in setup; config.json's values reach both
+collectors. The settings apply when starting a collector; old sessions and
+existing incident records are not silently reclassified. Unverified
+extra-battery temperatures and SOC do not enter these rules. A legitimate zero
+is allowed; zero alone is not an anomaly. An abrupt return from a low value can
+create another event and extend the same incident.
 
-Example **synthetic** detail: `bms_max_cell_temp: 23 -> 0 °C in 1.100s receipt time.`
+Example **synthetic** details: `bms_max_cell_temp: 23 -> 0 °C in 1.100s receipt time.`,
+`bms_min_cell_temp -40 °C is outside -20..60 °C.` and
+`cms_batt_soc: 80 -> 60 % in 1.000s receipt time.`
 The conclusion is “suspect telemetry,” not “physically impossible” or “bad BMS.”
+
+The Jackery recorder adds fixed rules of its own under the same category, each
+pinning an incident: while its AC output is on, an output voltage outside 90 to
+260 V, a frequency outside 45 to 65 Hz, or a voltage step of 15 % or more
+([`jackery_health.py`](../src/openpowerstation/jackery_health.py)). It also records this
+category, pinned, when the station answers over BLE without any of its core
+telemetry (SOC, input and output power); that reply is kept as a frame, and the
+detail counts the unproductive polls in a row.
 
 #### `device_error` — a nonzero device-reported error field
 
@@ -477,14 +619,33 @@ controller-specific code dictionary or bitmask interpretation is supplied.
 For example, `errcode`, `bms_err_code` and `mppt_err_code` are different sources;
 their numbers must not be combined into one universal error-number namespace.
 An absent error field means unknown, not a verified zero or a healthy battery.
+The Jackery applies the same rule to its one error field, `errcode`.
+
+#### `unmapped_change` — a Jackery property of unknown meaning changed
+
+The Explorer reports more properties than OpenPowerstation has verified meanings for.
+When one of those takes a value not seen before in the session (the first value
+is a baseline), this event records the property name and value and pins an
+incident, because an unexplained state change is the evidence worth keeping.
+Once a property has shown 32 distinct values it is treated as a measurement: a
+final, unpinned `unmapped_change` says so and its later changes are not
+reported.
 
 #### `state_change` — selected raw state transitions
 
-Only these three fields generate this event:
+These three fields generate this event on any change:
 
 - `cms_bms_run_state`
 - `cms_chg_dsg_state`
 - `plug_in_info_ac_charger_flag`
+
+So do the two AC-output feedback bitmasks, `flow_info_ac_hv_out` and
+`flow_info_ac_lv_out`, but only when their low two bits change: those are the
+outlet state the Home Assistant switches show (0 off, 2 or 3 on, 1 unknown), and
+the bits above them can move while the output does not. The DP3 acknowledges no
+command, so this is the record that an output actually switched, whether a
+command, the EcoFlow app or the device's own buttons did it; the detail names
+the old and new outlet state after the raw values.
 
 A prior comparable value is required; the first observed state is not a
 transition. The detail records the field and old/new raw values. Changes to
@@ -500,6 +661,22 @@ creates this event. It is about the host clock, not the battery's clock.
 Charts and temperature comparisons continue on monotonic receipt time; the
 event does not start a new segment or pin an incident. Fine timestamp precision
 still does not establish device-side timing or causation.
+
+#### `control`, `control_refused`, `control_unverified` — device commands
+
+Every control request that reaches a collector leaves one of these, whether or
+not anything was written; see
+[Controlling the DP3 and Jackery](#controlling-the-dp3-and-jackery-from-home-assistant).
+`control` means an allowlisted DP3 `ConfigWrite` left the radio, or a Jackery
+command was sent and its status readback confirmed it. `control_refused` means
+the command was refused before reaching the radio: control is off, there is no
+live session, the request is too old, dated later than the clock now reads or
+superseded by a newer press of the same control, it is not on the allowlist,
+or, on a DP3 AC output, it is not the guarded payload. `control_unverified`
+means the write itself failed -- the DP3's Bluetooth write, or a Jackery write
+or the readback that confirms it -- so the command may have reached the device
+and its state is unknown until the next read. None of them starts a segment or
+pins an incident.
 
 #### `manual` — user annotation and incident marker
 
@@ -518,15 +695,40 @@ the separately running qualification collector.
 
 ### Incident protection is separate from event logging
 
-Automatic incident triggers are `suspect_telemetry`, `device_error`,
-`disconnected`, `corrupt_transport`, and `host_suspend`, plus user-created
-`manual` markers. The reserved `capture_error` category also pins if supplied.
-Each trigger requests `[event time - 300 s, event time + 300 s]`; overlapping
-windows in the same session merge and retain their trigger reasons.
+The catalog's **Pins incident** column lists every incident trigger: the
+automatic ones, and user-created `manual` markers. Each trigger requests
+`[event time - 300 s, event time + 300 s]`; overlapping windows in the same
+session merge and retain their trigger reasons.
 
-`connected`, `released`, `silence`, `telemetry_resumed`, `connection_failed`,
-`state_change`, and `clock_change` do not pin history automatically. A timeline
-row is therefore not necessarily protected from ordinary retention forever.
+Every kind marked No there, such as `connected`, `silence`, `loop_stall` or
+`control`, leaves history unpinned. A timeline row is therefore not
+necessarily protected from ordinary retention forever.
+
+Collector pins lapse. `disconnected`, `corrupt_transport`, `host_suspend` and
+the Jackery's `capture_gap` describe the collector's link or host rather than
+the battery, and an always-on collector raises them routinely; kept forever,
+each one held ten minutes of full-rate history outside both retention limits.
+A window whose every reason is one of these is now protected for 30 days after
+it ends, and all such windows together keep at most 1 GB of record data; past
+either limit the oldest lapses first.
+
+The byte limit does not wait for a window to stop growing. While repeated
+collector events keep extending one incident, maintenance measures only the
+prefix old enough that no more rows should land in it (ten minutes behind the
+current time), preserves that measurement cursor when the tail moves forward,
+and can lapse the oldest whole collector-only window once the measured
+protected total exceeds the cap. Repeated disconnects less than ten minutes
+apart therefore cannot reset accounting indefinitely.
+
+A lapsed window is ordinary history
+again: what is past the seven-day limit goes at once, and Jackery history is
+thinned. The collector's log names each lapse in a `[maintenance]` line.
+Every other pin is evidence and never lapses -- `manual`, `device_error`,
+`suspect_telemetry`, the Jackery's `unmapped_change`, and a supplied
+`capture_error` -- and one such reason in a merged window keeps the whole
+window. Incidents recorded or changed by an earlier release are judged by the
+same rule whenever this one opens the database, so collector-only windows older
+than 30 days are released on the first maintenance passes after an upgrade.
 
 “Window complete” means the requested pre/post span is covered by the stored
 frame bounds and the pre-history was available when marked. It does not mean
@@ -546,7 +748,7 @@ These labels are **not** additional EcoFlow events:
 | `authenticating` | Establishing an authenticated local BLE session |
 | `recording` | Authenticated receive loop active; check per-field ages for actual freshness |
 | `stale` | Receive loop has reported silence |
-| `reconnecting` | Waiting for the capped backoff before another connection attempt |
+| `reconnecting` | Waiting for the capped backoff before another connection attempt, naming the [reason](#collector_reason--why-telemetry-stopped) the last one failed. The delay doubles from 2 to 60 seconds and starts over only once a session delivers measurements, not on authentication alone |
 | `released` | User suspended Bluetooth collection until Resume |
 | `error` | Collection failed or was refused; the displayed reason is significant |
 
@@ -555,14 +757,20 @@ Persisted session status is one of `recording`, `stopped`, `error`, or
 sessions are marked `interrupted`, with an end based on their last stored
 frame. This recovery does not generate an `interrupted` event row and does
 not establish a battery reboot. A stale on-disk `recording` status is not a
-process-liveness guarantee before that recovery happens.
+process-liveness guarantee before that recovery happens. The desktop viewer,
+which never opens a writer, therefore goes by the writes themselves: a
+`recording` session nothing has been written to for 15 minutes (plus one poll
+interval, for a collector polling slower than that) is shown as
+**INTERRUPTED**, never finalized, and does not block starting a recording.
+Another process's session is timed by the wall clock, never by that
+process's monotonic clock.
 
 | Frame status | Meaning and treatment |
 |---|---|
 | `pending` | Raw bytes committed; interpretation has not completed, possibly due to interruption |
 | `decoded` | The supported property payload parsed; this does not guarantee every desired field was present |
 | `unknown_message` | Packet passed framing but its source/command route is not supported; raw frame retained, no guessed fields |
-| `invalid_packet` | Delivered protocol frame failed packet validation; raw frame retained and a corruption incident created |
+| `invalid_packet` | Delivered protocol frame failed packet validation; raw frame retained, and the first of a run creates a corruption incident |
 | `invalid_protobuf` | Supported route, but its body could not be parsed with the pinned protobuf schema; raw retained, no automatic protobuf-specific incident |
 | `repeated_unverified` | Identical raw packet recognized as a possible duplicate; bytes retained, freshness/comparison updates suppressed |
 
@@ -578,6 +786,38 @@ Measurement quality is `observed` (a mapped numeric field was present),
 `community_mapping` (derived extra-battery SOC), `unverified` (extra-battery
 temperature heuristic), or `repeated_unverified`. “Not observed” and “not mapped”
 are viewer coverage labels, not numeric zero or device fault statuses.
+
+#### `collector_reason` — why telemetry stopped
+
+Collection health says what the collector is doing, and reads `waiting` or
+`error` whatever went wrong. The DP3 collector also keeps one constant naming
+why telemetry last stopped. It is stored in the recording, the bridge publishes
+it as `sensor.opendp3_collector_reason`, and the reconnecting line in the app
+log carries it: “Retry in 4s (not_advertising). No cloud fallback.” It changes
+with each failed attempt or ended session, and returns to `none` once a session
+delivers measurements, not merely once one authenticates. The events beside it
+carry the detail: each `connection_failed` and `disconnected` detail starts
+with the same `reason=`. It belongs to the collector rather than a session, so
+a start the storage reserve refuses, which opens no session, still sets it.
+
+Where collection stops, the add-on starts the collector again every 15
+seconds, and it fails the same way until the cause is fixed.
+
+| Reason | Meaning | What to do |
+|---|---|---|
+| `none` | Telemetry is flowing, or nothing has failed since it last did | Nothing |
+| `not_advertising` | The configured DP3 did not advertise during a scan: switched off, out of range, or held by its phone app's Bluetooth session | Close the phone app's session; check power and range. Retried |
+| `radio_busy` | The other collector kept the shared Bluetooth adapter past the wait | Usually clears by itself; if it persists, the Jackery collector's attach is stuck. Retried |
+| `bluetooth_error` | BlueZ or Bleak failed while connecting or authenticating, or an attempt hung until the adapter lease's hold limit | Read the `connection_failed` and `session_error` details. Retried |
+| `link_lost` | An authenticated link dropped | Retried; frequent drops point at range or interference |
+| `silent` | An authenticated link delivered no frames, for two silent rounds or the whole lease | Retried; silence on a link that stays up is the device, not the radio |
+| `no_measurements` | Frames kept arriving for the 75-second lease, but none carried a measurement | `session_lease_expired` names what arrived. A firmware change the decoder does not know needs a decoder update. Retried |
+| `undecodable_frames` | Ten frames in a row did not decode: the session key no longer matches | Retried with a new handshake; if it persists, another client keeps re-keying the DP3 |
+| `protocol_unsupported` | The handshake, GATT services or framing were not what this decoder knows | A firmware change: plan a decoder update. A refused handshake stops collection |
+| `authentication_rejected` | The DP3 refused this account's login: re-bound to another account, factory-reset, or a wrong user ID | Run setup again, or correct the user ID. Collection stops |
+| `storage_reserve` | Free space fell below the evidence store's 128 MiB reserve | Free space on the data volume. Recording stops; existing evidence is intact |
+| `storage_failed` | The evidence store or capture processing failed | Read the app log. Recording stops |
+| `collector_error` | Anything else | Read the app log and the latest events |
 
 ### Device-originated messages and event structures
 
@@ -595,16 +835,19 @@ adapts the former and deliberately excludes the latter.
 | `RuntimePropertyUpload` | Schema exists; no runtime-property route is implemented; do not assign unknown packets to it by guesswork |
 | `DevRequest` / `DevRequestAck` | Schema exists; not serviced by the recorder |
 | `ConfigRead` / `ConfigReadAck` | Schema exists; not requested or decoded as standalone messages |
-| `ConfigWrite` / `ConfigWriteAck` and other configuration helpers | Not used; outgoing configuration, output-control, clock and firmware writes are blocked |
+| `ConfigWrite` / `ConfigWriteAck` and other configuration helpers | Opt-in control only: while **Allow control** is on, a `ConfigWrite` carrying `cfg_hv_ac_out_open` or `cfg_lv_ac_out_open` and nothing else may be sent, on request, to destination `0x02`, command set `0xFE`, command `0x11`. Every other configuration, clock and firmware write is blocked by the outbound gate; acknowledgements are not decoded |
 | Any other post-authentication route | Retain the delivered raw frame as `unknown_message`; no automatic acknowledgement or cloud fallback |
 
 Authentication may use the device's advertised mode 0, 1 or 7, subject to the
 supported advertised protocol version. Only the verified authentication shapes
-are allowed out. After authentication the outgoing gate closes completely:
-**no polling, event acknowledgements, keepalive commands, upload-period changes,
-clock synchronization or output controls are sent.** This restriction may
-limit what a particular firmware publishes. “Read-only” does not mean radio
-silence during authentication; BLE connection/subscription traffic is needed.
+are allowed out. After authentication the handshake allowlist closes: **no
+polling, event acknowledgements, keepalive commands, upload-period changes or
+clock synchronization are sent.** The one exception is the opt-in AC-output
+`ConfigWrite` in the table above. It is sent only when **Allow control** is on
+and Home Assistant requests it, so with control off, the default, nothing is
+written after authentication. This restriction may limit what a particular
+firmware publishes. “Read-only” does not mean radio silence during
+authentication; BLE connection/subscription traffic is needed.
 
 #### EcoFlow `EventPush`: what the pinned schema actually defines
 
@@ -676,18 +919,19 @@ pinned schema, not a promise that all 749 fields are reachable on your DP3.
 
 ### Telemetry fields available to this decoder
 
-OpenPowerstation maps **40 numeric field names**: 36 directly from
-`DisplayPropertyUpload`, plus four conditional extra-battery values. Firmware
+OpenPowerstation maps **42 numeric field names**: 38 directly from
+`DisplayPropertyUpload`, plus 4 conditional extra-battery values. Firmware
 may publish only a subset. The complete field-by-field mapping, including
 tags, units and event eligibility, is in
 [the normalized field catalog](PROTOCOL_SCHEMA.md#normalized-field-catalog).
 
 | Group | Mapped fields | Automatic timeline behavior |
 |---|---|---|
-| Temperatures, °C | `bms_max_cell_temp`, `bms_min_cell_temp`, `bms_max_mos_temp`, `bms_min_mos_temp`, `cms_batt_temp` | Eligible for the configured `suspect_telemetry` rule |
-| Charge/health estimates, % | `bms_batt_soc`, `cms_batt_soc`, `bms_batt_soh`, `cms_batt_soh` | No SOC-drop or SOH-change event rule implemented |
+| Temperatures, °C | `bms_max_cell_temp`, `bms_min_cell_temp`, `bms_max_mos_temp`, `bms_min_mos_temp`, `cms_batt_temp` | Eligible for the configured `suspect_telemetry` jump rule; the cell and CMS temperatures also for the −20…60 °C band |
+| Charge/health estimates, % | `bms_batt_soc`, `cms_batt_soc`, `bms_batt_soh`, `cms_batt_soh` | SOC: eligible for the `suspect_telemetry` step rule (5 % within 10 s); no SOC-drop or SOH-change event rule |
 | Power, W | `pow_in_sum_w`, `pow_out_sum_w`, `pow_get_ac_in`, `pow_get_ac_lv_out`, `pow_get_ac_hv_out`, `pow_get_pv_h`, `pow_get_pv_l`, `pow_get_bms` | No automatic zero-power, overload or power-balance event rule implemented |
 | Selected state values | `cms_bms_run_state`, `cms_chg_dsg_state`, `plug_in_info_ac_charger_flag` | Eligible for `state_change` |
+| AC output state bitmasks | `flow_info_ac_hv_out`, `flow_info_ac_lv_out` | Stored raw; the opt-in AC output switches read their on/off state from these. Eligible for `state_change` when the low two bits (the outlet state) change |
 | PV source types | `plug_in_info_pv_h_type`, `plug_in_info_pv_l_type` | Stored raw; no automatic state-change event |
 | Device/controller errors | `errcode`, `bms_err_code`, `mppt_err_code`, `inv_err_code`, `pd_err_code`, `llc_err_code`, `llc_inv_err_code`, `dcdc_err_code` | Eligible for `device_error` on a new nonzero value |
 | Attached-port errors | `plug_in_info_5p8_err_code`, `plug_in_info_acp_err_code`, `plug_in_info_4p8_1_err_code`, `plug_in_info_4p8_2_err_code`, `plug_in_info_dcp_err_code`, `plug_in_info_dcp2_err_code` | Same raw-error rule; port labels are not fault-code meanings |
@@ -714,8 +958,8 @@ temperature uses an upstream byte-selection heuristic from reserved word 13.
 These are not independent physical sensors. Missing connection flags or
 zero-filled disconnected slots do not create fictitious batteries.
 
-The display schema contains 296 fields. Fields outside the 36 direct numeric
-mappings, such as per-USB/12 V power, flow flags, fan data, remaining-time
+The display schema contains 296 fields. Fields outside the direct numeric
+mappings, such as per-USB/12 V power, other flow flags, fan data, remaining-time
 estimates, configuration values and error history, can remain visible in
 local decoded JSON **if they arrive in a supported display packet**. They
 are not automatically charted, normalized, exported, or given event rules.
@@ -730,7 +974,7 @@ Raw fields view cannot name or interpret them.
 |---|---|
 | `receipt_utc` | UTC event timestamp rendered to milliseconds; usually host receipt/detection time, with the playback-marker qualification above |
 | `elapsed_s` | Event position in the session's monotonic timeline |
-| `kind` | One of the 14 recognized identifiers, or the export-only fallback `unrecognized_event` |
+| `kind` | One of the identifiers in the [timeline-event catalog](#complete-opendp3-timeline-event-catalog), or the export-only fallback `unrecognized_event` |
 
 `unrecognized_event` is a sanitization label applied to an event category not
 on the export allowlist. It is not an incoming EcoFlow event type and is not
@@ -762,9 +1006,12 @@ Direct CLI usage defaults to the user's platform data directory
 that folder already exists from before the rename); use --data-dir before the subcommand to
 choose the same local directory as the launcher.
 
-The config.json file contains device selection and the account user ID,
-**not passwords or tokens**. Protect that directory with your normal Windows
-account access controls. Do not commit or share it. Data, databases, and
+The config.json file contains device selection, the account user ID -- with
+the serial the DP3 advertises, the whole of its Bluetooth login -- and the
+optional broker password, but **no EcoFlow password or token**. On Windows the
+user ID and the broker password are DPAPI-protected to your Windows account
+([details](SECURITY.md#credentials-memory-and-windows-folders)). Protect
+that directory with your normal Windows account access controls. Do not commit or share it. Data, databases, and
 configuration should remain in a private per-user folder, not a shared or publicly
 writable portable folder. OpenPowerstation inherits Windows permissions; it does not
 audit or tighten ACLs automatically. Open recordings only from trusted sources;
@@ -772,23 +1019,78 @@ read-only SQLite access is not a security sandbox. Data, databases, and
 credentials are ignored by Git. Device-wide lock files live under the user's
 OpenPowerstation data directory so separate database paths cannot claim the same device.
 
-Raw frames commit before decoding in SQLite WAL mode with FULL synchronization.
+That lock only reaches one machine. Each battery accepts a single Bluetooth
+connection, so where another machine records them -- a Home Assistant
+Raspberry Pi running the OpenPowerstation app, say -- make this install a viewer: untick
+**Record the batteries from this PC** under Settings, or set
+`"role": "viewer"` in `config.json`. A viewer still opens and exports
+recordings, but Start recording is disabled and every collector and bridge
+(`record`, `jackery-record`, `bridge`, `jackery-bridge`, Start-OpenPowerstation.cmd)
+refuses before it touches the radio or the broker. Without the setting an
+install is a collector, as every earlier one was. `jackery-record` needs no
+`config.json`; with one that cannot be read it refuses rather than guess.
+
+Each raw frame commits, synced to disk, before it is decoded (SQLite WAL mode,
+`synchronous=FULL`). Its interpretation -- decoded fields and measurements,
+which the raw bytes can always reproduce -- commits at `synchronous=NORMAL` and
+becomes durable with the next frame's sync, so a frame costs one sync rather
+than two. WAL keeps commits in order, so after a power loss the newest frame can
+at worst be left pending: raw bytes intact, not yet decoded, the same state a
+crash while decoding leaves. Raw frames stay at FULL on purpose. The host runs
+from a battery-backed supply that can itself fail, and the frames just before a
+power loss are the ones that explain it; at NORMAL a power loss could roll back
+every frame since the last checkpoint, a minute or more of them. Events,
+incident pins and maintenance also commit at FULL.
 These are decrypted protocol frames; wireless ciphertext and session keys are not retained.
 The database includes unknown telemetry for future decoder work. Authentication
 exchanges and session keys are excluded. Interrupted sessions are identified on
 the next writer startup, and undecoded committed frames remain marked pending.
 
 Ordinary history defaults to seven days or 5 GB of conservatively accounted
-record data. Pinned incidents are excluded from pruning. SQLite page/index/WAL
-overhead and pinned incidents use additional disk space; the database is not
-a strict 5 GB file-size cap. Maintenance runs during collection. It stops visibly
-at a 128 MiB free-space reserve or on write/processing failure. Existing pinned
-evidence is never silently deleted. Remove an incident's protection only when
-you are ready for normal retention to remove its old data.
+record data. Pinned incidents are excluded from pruning: evidence pins until a
+person removes them, collector pins until they lapse (30 days, 1 GB together;
+see [Incident protection](#incident-protection-is-separate-from-event-logging)).
+SQLite page/index/WAL overhead and pinned incidents use additional disk space;
+the database is not a strict 5 GB file-size cap. Maintenance runs during
+collection and gives pages it frees back to the filesystem, keeping 16 MiB of
+them for new frames to reuse. Recording stops visibly at a 128 MiB free-space
+reserve or on write/processing failure. A collector that starts below the
+reserve opens its database without recording anything: it applies its own
+retention policy in full (the Jackery's thinning, not a seven-day rule), gives
+the space back, and records only once free space is above the reserve again;
+otherwise it stops with the same message. Evidence pins are never deleted
+automatically. Remove an incident's protection only when you are ready for
+normal retention to remove its old data.
+
+Maintenance runs once a minute inside the capture loop, so each pass stops
+starting new batches of 256 rows after 50 ms and the next pass resumes where it
+stopped. Its progress and the running byte total live in the database itself
+(`maintenance_progress`), so a routine pass costs the minute of frames that
+arrived or expired, not the history already kept. Lapsing a collector pin, and
+counting the bytes one keeps, go a batch at a time the same way (`pin_lapse`),
+as does returning free pages, 1 MiB per step. Two situations leave a backlog that later passes
+work through a little at a time: the first run on a database recorded by an
+earlier release, and removing an incident's protection, after which retention
+re-examines the whole database. While a backlog remains, expired frames can
+outlive the seven days and the 5 GB cap is not yet enforced, because the cap
+waits until every frame is counted. A pass that takes longer than a second is
+named in the collector's log as a `[maintenance]` line.
+
+The bridges read the newest session every few seconds. Each session's frame
+count and newest frame are kept in the database as frames are written and
+removed (`session_frames`), so that reading is a few index seeks however long
+the session has run. It costs one more database page written per frame. The
+first collector start on a database recorded by an earlier release counts what
+is already stored, once; until then a reader counts the session itself.
 
 **Export evidence** writes numeric telemetry CSV, event-category CSV, an offline
-HTML report, a PNG chart, and summary JSON. With a selected incident it exports
-that window; otherwise it exports the selected session. Shareable exports
+HTML report, a PNG chart, and summary JSON. **Export evidence…** on Overview
+and Exported files exports the whole session shown; **Export selected
+incident…** on Incidents exports that incident's window, and only with one
+selected. `summary.json` names the device, the scope (`session` or
+`incident`) and, where the history was thinned (see
+[What is kept on disk](#what-is-kept-on-disk)), the elapsed time thinning
+reaches and its bucket; the report states the cadence. Shareable exports
 exclude identifiers, private notes/firmware text, unknown fields and raw bytes.
 No files are uploaded or sent anywhere.
 
@@ -815,18 +1117,30 @@ Or run **OpenPowerstation-Bridge.cmd**. Use `--dry-run` first: it prints every e
 current state payload without connecting to anything.
 
 Home Assistant receives the decoder's allowlisted numeric fields plus capture-health
-diagnostics. Raw frames, decoded protobuf, the account ID and private notes are never
+diagnostics, and one value the bridge derives: `conversion_loss_w`, which is
+`pow_in_sum_w - pow_out_sum_w - pow_get_bms` computed from the operands of the same
+publish. A Home Assistant template doing that subtraction re-renders as each of the
+three entities updates and records values that mix new and old operands. The derived
+value is published only while all three operands are fresh, and is never clamped at
+zero. Raw frames, decoded protobuf, the account ID and private notes are never
 published, and the serial is replaced by the same hash the collector uses for its
 per-device lock. Fields whose meaning is a raw code or a community mapping arrive as
 **diagnostic** entities, so they do not read as verified measurements.
 
 Readings go unavailable rather than stale: if the recorder stops, the battery falls
-silent for 45 seconds, or the newest session is a synthetic demo, the bridge publishes
-no values and reports why through `sensor.opendp3_collector_state`. A number shown in
-Home Assistant is one the device actually reported recently.
+silent for 45 seconds, the newest session is a synthetic demo, or the recording cannot
+be read, the bridge publishes no values and reports why through
+`sensor.opendp3_collector_state` -- `unreadable` in the last case, with the
+SQLite or OS error in one `database read error` line of its log. A number shown in
+Home Assistant is one the device actually reported recently. `sensor.opendp3_collector_reason`
+says why the collector last stopped delivering telemetry -- the DP3 not advertising, its
+login rejected, the storage reserve reached, frames arriving without measurements, and so
+on -- as one of the constants in [the reason table](#collector_reason--why-telemetry-stopped),
+and `none` once telemetry flows again.
 
-The broker password is stored in `config.json` in plain text. Use a broker account
-created only for this, so the stored value grants nothing else. See
+The broker password is stored in `config.json`, DPAPI-protected on Windows and in
+plain text in the HAOS app's configuration. Use a broker account created only for
+this, so the stored value grants nothing else. See
 [docs/SECURITY.md](SECURITY.md).
 
 ## Command line
@@ -839,9 +1153,9 @@ Run commands with the project's Python:
     .\.venv\Scripts\python.exe -m openpowerstation --data-dir data setup
     .\.venv\Scripts\python.exe -m openpowerstation --data-dir data setup --login
     .\.venv\Scripts\python.exe -m openpowerstation --data-dir data record --hours 8
-    .\.venv\Scripts\python.exe -m openpowerstation --data-dir data jackery-record --interval 3
+    .\.venv\Scripts\python.exe -m openpowerstation --data-dir data jackery-record --serial <serial> --interval 3
     .\.venv\Scripts\python.exe -m openpowerstation --data-dir data jackery-compact
-    .\.venv\Scripts\python.exe -m openpowerstation --data-dir data jackery-bridge --interval 60
+    .\.venv\Scripts\python.exe -m openpowerstation --data-dir data jackery-bridge --serial <serial> --interval 60
     .\.venv\Scripts\python.exe -m openpowerstation --data-dir data gui
     .\.venv\Scripts\python.exe -m openpowerstation --data-dir data bridge --dry-run
     .\.venv\Scripts\python.exe -m openpowerstation --data-dir data bridge
@@ -864,8 +1178,8 @@ derive the RC4 session key. Status and control then use GATT characteristics
 `jackery-scan` is passive. `jackery-status` connects, derives the key, sends only
 the device-property query, reassembles the reply, prints it, and disconnects.
 The phone app must release its BLE connection first because the Explorer accepts
-only one BLE client. This is currently a hardware-qualification probe, not yet
-the unattended recorder selected by `Start-OpenPowerstation.cmd`.
+only one BLE client. It is a hardware-qualification probe; the unattended
+recorder is `jackery-record`, below.
 
 **Observed Explorer 1000 v2 constraint (2026-09-04):** on this installed unit,
 ordinary radio activation is not a practical acquisition window. The station
@@ -946,12 +1260,42 @@ on some Jackery product families, but BLE is the simpler and less invasive local
 route for this portable model.
 
 `jackery-record` discovers the Explorer, opens one BLE session, and polls it on that
-session, writing snapshots to `data\jackery.sqlite`. The station only advertises in
-short windows, so the recorder holds the session it manages to open instead of
-reconnecting for every poll, and only rediscovers after the link actually drops.
+session, writing snapshots to `data\jackery.sqlite`. It and `jackery-bridge` take
+the Explorer's 15-digit serial (`jackery-scan` shows it) with `--serial`; no serial
+is built in. **Start-OpenPowerstation.cmd** reads it from `jackery_serial` in `config.json`
+and leaves the Jackery alone while that is empty; the HAOS app passes its own
+`jackery_serial` option. Discovery connects only to the
+named serial: another Explorer in range is ignored before anything connects,
+because the station accepts one BLE client and opening a neighbour's unit only to
+reject it would take that unit's slot and cost ours its window. The station only
+advertises in short windows, so the recorder holds the session it manages to open
+instead of reconnecting for every poll, and rediscovers only when the link fails or
+stops producing. A GATT write that fails or misses its deadline reattaches at once.
+A poll produces when its reply carries core telemetry -- SOC, input or output
+power (`JACKERY_CORE_KEYS` in `jackery_fields.py`) -- and the same keys decide the
+bridge's liveness and the add-on supervisor's frame lease, so a station answering
+with settings fields alone reads as the outage it is. A status query left unanswered
+on a link that raised nothing, or a reply without core telemetry, costs one poll: the
+first unanswered one is recorded as `silence`, each reply without core telemetry as a
+pinned `suspect_telemetry` and kept as a frame just as it arrived, and only five
+unproductive polls in a row (about 15 seconds at the default rate) drop the session
+as `disconnected`.
 The GATT write that starts each read shares the read's deadline rather than
 running unbounded, and session cleanup is bounded too, so a stalled BlueZ
 operation ends that session instead of pausing collection until it returns.
+The recording opens when the collector starts, before the Explorer is found, so a
+search is part of it: the bridge reports the collector as `waiting` rather than the
+previous recording's `stopped`, failed attaches -- the station not advertising
+included -- are retried in process and recorded as `connection_failed` (the first
+of each kind, then one summary per 10 minutes), and `connected` records what the
+search cost. After a reattach the
+poll schedule starts again from the new session, so the polls missed during the
+outage are not sent to the station back to back. A collector that does exit on an
+unexpected exception closes its recording as `error` rather than `stopped`; a
+Ctrl+C or the add-on supervisor's SIGINT closes it as `stopped`, without a
+traceback. The log gets one line per change -- an attach, telemetry starting or
+resuming, an unproductive poll, the search -- never one per reading, and names the
+Explorer by the handle the bridge publishes under rather than by its serial.
 A local recording involves no Jackery account, no cached session, and no outbound
 connection to anything but your own broker. **Start-OpenPowerstation.cmd** starts it.
 
@@ -970,14 +1314,22 @@ can never block it or be mistaken for Jackery telemetry. After configuring MQTT,
 from the EcoFlow `opendp3/` device. When **Allow control** is enabled, it also
 publishes these actionable Home Assistant entities on the device pages:
 
-* DP3: HV AC output and LV AC output switches.
+* DP3: HV AC output and LV AC output switches, which change an output only on
+  the guarded payload described under
+  [Controlling the DP3 and Jackery from Home Assistant](#controlling-the-dp3-and-jackery-from-home-assistant).
 * Jackery: AC output and DC output switches, plus a Battery Saving Mode selector
-  (`full` or `save`, the fixed 15–85% range).
+  (`full` or `save`, the fixed 15–85% range) and screen-timeout, charging-mode
+  (`standard` or `quiet`) and Auto Power-Off (`off`, `2h`, `8h`, `12h` or `24h`,
+  the station's own power-off timer) selectors. A selector's state is always one of
+  its offered options; a reading that names none of them makes it unavailable
+  rather than leaving the previous option on show. The raw Battery Saving reading
+  stays visible on the `Low-power mode` sensor.
 
 Each control has its command topic, live bridge/telemetry availability, and a
 device-page icon. Jackery commands are relayed to the authenticated local BLE
 recorder and verified by status readback. The bridges re-announce discovery when
-Home Assistant sends its restart/birth message. Start `gui` in a second terminal
+Home Assistant sends its restart/birth message and after every reconnect to the
+broker, and at no other time: discovery is retained. Start `gui` in a second terminal
 to watch a live recording.
 Start `gui` in a second terminal to watch a live recording.
 
@@ -1011,6 +1363,12 @@ looking at. Steady state is roughly 200 MB of recent full-rate history plus tens
 megabytes a year of minute-level history, and nothing is forgotten after a week any
 more.
 
+Where history is thinned is recorded (`compaction_progress`), and the charts
+read it: the desktop and the evidence export join kept frames up to a bucket
+apart there instead of breaking the line at 30 seconds, while incident windows
+and recent history keep the 30-second rule. An evidence report says which part
+of its window was thinned, and to what.
+
 **Only whole frames are ever deleted.** No measurement is removed while its frame
 survives, no `raw` blob is rewritten, and no averaged frame is ever synthesized, so
 every surviving row still re-derives from bytes the station actually sent and
@@ -1035,11 +1393,21 @@ pins an incident window, and pinned windows are never thinned:
 | Signal | Rule |
 |---|---|
 | `errcode` | non-zero and changed |
-| Battery temperature | outside −20…60 °C, or jumping ≥10 °C within 5 s |
+| Battery temperature | outside −20…60 °C (once per value, so a stuck sensor is one event), or jumping ≥10 °C within 5 s |
 | State of charge | moving ≥5 % within 10 s — faster than the cell chemistry allows, so a sensor fault or a BMS recalibration |
 | AC output | while the inverter is on: voltage outside 90–260 V, frequency outside 45–65 Hz, or voltage moving ≥15 % between samples |
 | Unverified properties | one of the seven unmapped properties takes a value not seen before this session |
+| Replies without core telemetry | a reply carrying none of SOC, input or output power; the reply itself is kept as a frame |
 | Capture gaps | no observation for four poll intervals — a missing sample is evidence too |
+
+The battery temperature and state-of-charge rules are the DP3's as well
+([`suspect_telemetry`](#suspect_telemetry--temperature-or-charge-discontinuity)),
+and config.json's temperature jump and window set them for both.
+
+A capture gap is about the collector, not the station, so its pin is a collector
+pin: it lapses after 30 days (sooner if collector pins together keep more than
+1 GB), and the window is then thinned like the history around it. So does a
+session drop's `disconnected` pin. The rest are kept until removed.
 
 The AC bands are deliberately wide enough to cover any mains in the world, because
 assuming a 120 V or a 230 V nominal would flag either every reading or none of them.
@@ -1085,10 +1453,11 @@ the bridge.
     Bridge      publishing to the configured broker.
 
 Running it twice is safe. The collector takes the same single-writer lock the
-desktop app takes and the bridge takes one of its own, so a copy that is already
-running is left alone instead of competing for the adapter or the broker. If the
-DP3 is still off, the launcher says so and leaves the collector running: it retries
-forever and attaches on its own once the battery is powered on.
+desktop app takes and each bridge takes one of its own, however it is started, so
+a copy that is already running is left alone instead of competing for the adapter
+or the broker. If the DP3 is still off, the launcher says so and leaves the
+collector running: it retries forever and attaches on its own once the battery is
+powered on.
 
 Both processes are detached and log to `data\collector.log` and `data\bridge.log`.
 **Stop-OpenPowerstation.cmd** ends them gracefully through their stop files — the session is
@@ -1100,7 +1469,8 @@ device offline in Home Assistant rather than leaving stale values behind. Add
 
 OpenPowerstation records without writing to either device until you explicitly opt in.
 **Settings → Allow control** publishes the DP3's HV/LV AC output switches and the
-Jackery's AC/DC output switches plus Battery Saving Mode and screen-timeout selectors.
+Jackery's AC/DC output switches plus Battery Saving Mode, screen-timeout, charging-mode
+and Auto Power-Off selectors. Auto Power-Off sets the station's own power-off timer.
 They appear in Home Assistant after the corresponding bridge reconnects. Jackery
 commands are sent over its authenticated local BLE session and verified by a
 follow-up status read.
@@ -1111,15 +1481,54 @@ the installment-payment fields. Its outbound gate parses each payload before it 
 written, requires the two allowed AC-output fields and nothing else, rebuilds the
 message from that allowlist, and compares the bytes. A permitted field beside a
 forbidden one is refused, as are unknown protobuf tags. Jackery uses a separate
-exact control/option allowlist before its compact JSON command is encrypted; Wi-Fi,
-firmware and arbitrary battery-boundary writes are not reachable through it.
+exact control/option allowlist, and its single write site checks every command
+again before encrypting it: only the status query, the clock sync each new
+session needs, and the one allowlisted control command a send was granted for
+are written. Wi-Fi, firmware and arbitrary battery-boundary writes are not
+reachable through it; [SECURITY.md](SECURITY.md#device-control) lists each
+Jackery property that can be written.
 
 Commands reach the radio the same way stop requests do: the bridge writes a
 request file, the collector picks it up. The recorder never opens a socket, so a
 broker that is unreachable, slow or hostile still cannot disturb a recording.
+Both devices share one queue (`control_queue.py`). Each request carries the time
+the bridge issued it, and is sent only while it is between 0 and 30 seconds old,
+checked immediately before that request is written rather than once for a batch.
+A request dated later than the clock now reads, because the clock moved back
+after it was issued, is refused rather than trusted. Presses for the same
+control that wait together collapse to the newest, and the older ones are
+recorded as refused. At most 64 requests wait for either device, and the add-on
+discards any still queued when it starts. Filenames carry a fixed-width
+per-process sequence after the issue timestamp. That is a safety property, not
+cosmetic formatting: when a coarse clock gives 10+ requests the same timestamp,
+lexical path order still matches numeric issue order across `9 -> 10`. The same
+order decides both which queued files are pruned as oldest and which equal-time
+request wins coalescing.
+
 Every DP3 command is recorded in the session as a `control` or `control_refused`
-event. Jackery commands are recorded as `control` after status readback, or as
-`control_unverified` if the write or verification fails.
+event, or as `control_unverified` when the write itself fails: the command may
+then have reached the DP3 before the link reported the failure, and the
+collector keeps recording. The DP3 acknowledges nothing, so its `control` means
+the write left the radio. Whether the output then changed is its own event: a
+change in the outlet state of `flow_info_ac_hv_out` or `flow_info_ac_lv_out`
+(their low two bits) is recorded as a `state_change`, whatever caused it.
+Jackery commands are recorded as `control` after status readback, as
+`control_unverified` if the write or verification fails, and as
+`control_refused` if they are refused before reaching the radio. The readback is
+kept as a frame of its own, stamped when it was read.
+
+**The DP3 AC output switches do not act on their own ON/OFF.** An AC output can
+be what powers the machine running Home Assistant, so a single tap must not be
+able to cut it. The switches report the outputs' real state, but a change needs
+the guarded payload, `GUARDED_ON` or `GUARDED_OFF`, published without retain to
+the switch's own command topic, `opendp3/<device_id>/control/<key>/set`. That is
+meant for an arm-then-change interlock such as a Home Assistant script. Anything
+that sends the switch's own `ON` or `OFF` is recorded as `control_refused` and
+changes nothing: the device page, a more-info dialog, Developer tools, or an
+automation calling `switch.turn_off`. The collector enforces this too, and runs
+only request files the bridge marked as guarded. This stops accidents. It does
+not stop anyone who can publish to your broker, who can send the guarded payload
+directly.
 
 **Two things to understand before enabling it.** Anything that can publish to
 your broker can request these allowlisted changes; broker access is the entire
@@ -1136,6 +1545,23 @@ Tests cover encrypted handshake interoperability using a simulated peer,
 outbound-command blocking, fragmented/corrupt frames, field presence and zeros,
 unknown payloads, duplicate observations, reconnect boundaries, clock jumps,
 retention, raw-first persistence, disk failure, locking, exports, and Qt playback.
+
+Both bridges' Home Assistant identity is pinned: `tests/test_mqtt_contract.py`
+compares every discovery topic, unique ID and default entity ID, and every state,
+command and availability topic, with the record in
+`tests/contract/mqtt_identity.json`. Home Assistant keeps an entity's history and
+settings under its unique ID, so changing one orphans the entity. Adding an
+entity is safe. The default entity ID is the one Home Assistant creates an entity
+under; an installation whose entities already carry other IDs can name those in
+an entity ID override file, so an entity created again lands back where its
+dashboards and templates look. The file is JSON keyed by device and discovery
+key, for example `{"dp3": {"bms_batt_soc": "sensor.my_battery_soc"}}`, and
+is named by the `OPENDP3_ENTITY_IDS` environment variable; the Home Assistant
+app uses `entity_ids.json` in its configuration folder when one is there (see
+`src/openpowerstation/entity_ids.py`). To change the
+record on purpose, regenerate it and review the diff:
+
+    python tests/test_mqtt_contract.py --update
 
 See [hardware qualification](HARDWARE_QUALIFICATION.md) before treating this
 as a validated recorder for your installed firmware. No deliberate fault

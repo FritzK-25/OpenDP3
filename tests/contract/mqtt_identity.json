@@ -1,0 +1,1542 @@
+{
+  "dp3": {
+    "serial": "MR51ABCDEFGHIJKL",
+    "device_id": "40c4bd44ff4b",
+    "entities": [
+      {
+        "discovery_topic": "homeassistant/binary_sensor/opendp3_40c4bd44ff4b/incident/config",
+        "component": "binary_sensor",
+        "key": "incident",
+        "unique_id": "opendp3_40c4bd44ff4b_incident",
+        "object_id": "opendp3_incident",
+        "default_entity_id": "binary_sensor.opendp3_incident",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "incident",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/bms_batt_soc/config",
+        "component": "sensor",
+        "key": "bms_batt_soc",
+        "unique_id": "opendp3_40c4bd44ff4b_bms_batt_soc",
+        "object_id": "opendp3_bms_batt_soc",
+        "default_entity_id": "sensor.opendp3_bms_batt_soc",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "bms_batt_soc",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/bms_batt_soh/config",
+        "component": "sensor",
+        "key": "bms_batt_soh",
+        "unique_id": "opendp3_40c4bd44ff4b_bms_batt_soh",
+        "object_id": "opendp3_bms_batt_soh",
+        "default_entity_id": "sensor.opendp3_bms_batt_soh",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "bms_batt_soh",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/bms_err_code/config",
+        "component": "sensor",
+        "key": "bms_err_code",
+        "unique_id": "opendp3_40c4bd44ff4b_bms_err_code",
+        "object_id": "opendp3_bms_err_code",
+        "default_entity_id": "sensor.opendp3_bms_err_code",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "bms_err_code",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/bms_max_cell_temp/config",
+        "component": "sensor",
+        "key": "bms_max_cell_temp",
+        "unique_id": "opendp3_40c4bd44ff4b_bms_max_cell_temp",
+        "object_id": "opendp3_bms_max_cell_temp",
+        "default_entity_id": "sensor.opendp3_bms_max_cell_temp",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "bms_max_cell_temp",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/bms_max_mos_temp/config",
+        "component": "sensor",
+        "key": "bms_max_mos_temp",
+        "unique_id": "opendp3_40c4bd44ff4b_bms_max_mos_temp",
+        "object_id": "opendp3_bms_max_mos_temp",
+        "default_entity_id": "sensor.opendp3_bms_max_mos_temp",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "bms_max_mos_temp",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/bms_min_cell_temp/config",
+        "component": "sensor",
+        "key": "bms_min_cell_temp",
+        "unique_id": "opendp3_40c4bd44ff4b_bms_min_cell_temp",
+        "object_id": "opendp3_bms_min_cell_temp",
+        "default_entity_id": "sensor.opendp3_bms_min_cell_temp",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "bms_min_cell_temp",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/bms_min_mos_temp/config",
+        "component": "sensor",
+        "key": "bms_min_mos_temp",
+        "unique_id": "opendp3_40c4bd44ff4b_bms_min_mos_temp",
+        "object_id": "opendp3_bms_min_mos_temp",
+        "default_entity_id": "sensor.opendp3_bms_min_mos_temp",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "bms_min_mos_temp",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/cms_batt_soc/config",
+        "component": "sensor",
+        "key": "cms_batt_soc",
+        "unique_id": "opendp3_40c4bd44ff4b_cms_batt_soc",
+        "object_id": "opendp3_cms_batt_soc",
+        "default_entity_id": "sensor.opendp3_cms_batt_soc",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "cms_batt_soc",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/cms_batt_soh/config",
+        "component": "sensor",
+        "key": "cms_batt_soh",
+        "unique_id": "opendp3_40c4bd44ff4b_cms_batt_soh",
+        "object_id": "opendp3_cms_batt_soh",
+        "default_entity_id": "sensor.opendp3_cms_batt_soh",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "cms_batt_soh",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/cms_batt_temp/config",
+        "component": "sensor",
+        "key": "cms_batt_temp",
+        "unique_id": "opendp3_40c4bd44ff4b_cms_batt_temp",
+        "object_id": "opendp3_cms_batt_temp",
+        "default_entity_id": "sensor.opendp3_cms_batt_temp",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "cms_batt_temp",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/cms_bms_run_state/config",
+        "component": "sensor",
+        "key": "cms_bms_run_state",
+        "unique_id": "opendp3_40c4bd44ff4b_cms_bms_run_state",
+        "object_id": "opendp3_cms_bms_run_state",
+        "default_entity_id": "sensor.opendp3_cms_bms_run_state",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "cms_bms_run_state",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/cms_chg_dsg_state/config",
+        "component": "sensor",
+        "key": "cms_chg_dsg_state",
+        "unique_id": "opendp3_40c4bd44ff4b_cms_chg_dsg_state",
+        "object_id": "opendp3_cms_chg_dsg_state",
+        "default_entity_id": "sensor.opendp3_cms_chg_dsg_state",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "cms_chg_dsg_state",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/collector_reason/config",
+        "component": "sensor",
+        "key": "collector_reason",
+        "unique_id": "opendp3_40c4bd44ff4b_collector_reason",
+        "object_id": "opendp3_collector_reason",
+        "default_entity_id": "sensor.opendp3_collector_reason",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "collector_reason",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/collector_state/config",
+        "component": "sensor",
+        "key": "collector_state",
+        "unique_id": "opendp3_40c4bd44ff4b_collector_state",
+        "object_id": "opendp3_collector_state",
+        "default_entity_id": "sensor.opendp3_collector_state",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "collector_state",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/conversion_loss_w/config",
+        "component": "sensor",
+        "key": "conversion_loss_w",
+        "unique_id": "opendp3_40c4bd44ff4b_conversion_loss_w",
+        "object_id": "opendp3_conversion_loss_w",
+        "default_entity_id": "sensor.opendp3_conversion_loss_w",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "conversion_loss_w",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/dcdc_err_code/config",
+        "component": "sensor",
+        "key": "dcdc_err_code",
+        "unique_id": "opendp3_40c4bd44ff4b_dcdc_err_code",
+        "object_id": "opendp3_dcdc_err_code",
+        "default_entity_id": "sensor.opendp3_dcdc_err_code",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "dcdc_err_code",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/errcode/config",
+        "component": "sensor",
+        "key": "errcode",
+        "unique_id": "opendp3_40c4bd44ff4b_errcode",
+        "object_id": "opendp3_errcode",
+        "default_entity_id": "sensor.opendp3_errcode",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "errcode",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/extra1_soc/config",
+        "component": "sensor",
+        "key": "extra1_soc",
+        "unique_id": "opendp3_40c4bd44ff4b_extra1_soc",
+        "object_id": "opendp3_extra1_soc",
+        "default_entity_id": "sensor.opendp3_extra1_soc",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "extra1_soc",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/extra1_temperature/config",
+        "component": "sensor",
+        "key": "extra1_temperature",
+        "unique_id": "opendp3_40c4bd44ff4b_extra1_temperature",
+        "object_id": "opendp3_extra1_temperature",
+        "default_entity_id": "sensor.opendp3_extra1_temperature",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "extra1_temperature",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/extra2_soc/config",
+        "component": "sensor",
+        "key": "extra2_soc",
+        "unique_id": "opendp3_40c4bd44ff4b_extra2_soc",
+        "object_id": "opendp3_extra2_soc",
+        "default_entity_id": "sensor.opendp3_extra2_soc",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "extra2_soc",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/extra2_temperature/config",
+        "component": "sensor",
+        "key": "extra2_temperature",
+        "unique_id": "opendp3_40c4bd44ff4b_extra2_temperature",
+        "object_id": "opendp3_extra2_temperature",
+        "default_entity_id": "sensor.opendp3_extra2_temperature",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "extra2_temperature",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/flow_info_ac_hv_out/config",
+        "component": "sensor",
+        "key": "flow_info_ac_hv_out",
+        "unique_id": "opendp3_40c4bd44ff4b_flow_info_ac_hv_out",
+        "object_id": "opendp3_flow_info_ac_hv_out",
+        "default_entity_id": "sensor.opendp3_flow_info_ac_hv_out",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "flow_info_ac_hv_out",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/flow_info_ac_lv_out/config",
+        "component": "sensor",
+        "key": "flow_info_ac_lv_out",
+        "unique_id": "opendp3_40c4bd44ff4b_flow_info_ac_lv_out",
+        "object_id": "opendp3_flow_info_ac_lv_out",
+        "default_entity_id": "sensor.opendp3_flow_info_ac_lv_out",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "flow_info_ac_lv_out",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/frame_count/config",
+        "component": "sensor",
+        "key": "frame_count",
+        "unique_id": "opendp3_40c4bd44ff4b_frame_count",
+        "object_id": "opendp3_frame_count",
+        "default_entity_id": "sensor.opendp3_frame_count",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "frame_count",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/inv_err_code/config",
+        "component": "sensor",
+        "key": "inv_err_code",
+        "unique_id": "opendp3_40c4bd44ff4b_inv_err_code",
+        "object_id": "opendp3_inv_err_code",
+        "default_entity_id": "sensor.opendp3_inv_err_code",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "inv_err_code",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/last_event/config",
+        "component": "sensor",
+        "key": "last_event",
+        "unique_id": "opendp3_40c4bd44ff4b_last_event",
+        "object_id": "opendp3_last_event",
+        "default_entity_id": "sensor.opendp3_last_event",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "last_event",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/last_frame/config",
+        "component": "sensor",
+        "key": "last_frame",
+        "unique_id": "opendp3_40c4bd44ff4b_last_frame",
+        "object_id": "opendp3_last_frame",
+        "default_entity_id": "sensor.opendp3_last_frame",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "last_frame",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/llc_err_code/config",
+        "component": "sensor",
+        "key": "llc_err_code",
+        "unique_id": "opendp3_40c4bd44ff4b_llc_err_code",
+        "object_id": "opendp3_llc_err_code",
+        "default_entity_id": "sensor.opendp3_llc_err_code",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "llc_err_code",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/llc_inv_err_code/config",
+        "component": "sensor",
+        "key": "llc_inv_err_code",
+        "unique_id": "opendp3_40c4bd44ff4b_llc_inv_err_code",
+        "object_id": "opendp3_llc_inv_err_code",
+        "default_entity_id": "sensor.opendp3_llc_inv_err_code",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "llc_inv_err_code",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/mppt_err_code/config",
+        "component": "sensor",
+        "key": "mppt_err_code",
+        "unique_id": "opendp3_40c4bd44ff4b_mppt_err_code",
+        "object_id": "opendp3_mppt_err_code",
+        "default_entity_id": "sensor.opendp3_mppt_err_code",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "mppt_err_code",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/pd_err_code/config",
+        "component": "sensor",
+        "key": "pd_err_code",
+        "unique_id": "opendp3_40c4bd44ff4b_pd_err_code",
+        "object_id": "opendp3_pd_err_code",
+        "default_entity_id": "sensor.opendp3_pd_err_code",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "pd_err_code",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/plug_in_info_4p8_1_err_code/config",
+        "component": "sensor",
+        "key": "plug_in_info_4p8_1_err_code",
+        "unique_id": "opendp3_40c4bd44ff4b_plug_in_info_4p8_1_err_code",
+        "object_id": "opendp3_plug_in_info_4p8_1_err_code",
+        "default_entity_id": "sensor.opendp3_plug_in_info_4p8_1_err_code",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "plug_in_info_4p8_1_err_code",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/plug_in_info_4p8_2_err_code/config",
+        "component": "sensor",
+        "key": "plug_in_info_4p8_2_err_code",
+        "unique_id": "opendp3_40c4bd44ff4b_plug_in_info_4p8_2_err_code",
+        "object_id": "opendp3_plug_in_info_4p8_2_err_code",
+        "default_entity_id": "sensor.opendp3_plug_in_info_4p8_2_err_code",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "plug_in_info_4p8_2_err_code",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/plug_in_info_5p8_err_code/config",
+        "component": "sensor",
+        "key": "plug_in_info_5p8_err_code",
+        "unique_id": "opendp3_40c4bd44ff4b_plug_in_info_5p8_err_code",
+        "object_id": "opendp3_plug_in_info_5p8_err_code",
+        "default_entity_id": "sensor.opendp3_plug_in_info_5p8_err_code",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "plug_in_info_5p8_err_code",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/plug_in_info_ac_charger_flag/config",
+        "component": "sensor",
+        "key": "plug_in_info_ac_charger_flag",
+        "unique_id": "opendp3_40c4bd44ff4b_plug_in_info_ac_charger_flag",
+        "object_id": "opendp3_plug_in_info_ac_charger_flag",
+        "default_entity_id": "sensor.opendp3_plug_in_info_ac_charger_flag",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "plug_in_info_ac_charger_flag",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/plug_in_info_acp_err_code/config",
+        "component": "sensor",
+        "key": "plug_in_info_acp_err_code",
+        "unique_id": "opendp3_40c4bd44ff4b_plug_in_info_acp_err_code",
+        "object_id": "opendp3_plug_in_info_acp_err_code",
+        "default_entity_id": "sensor.opendp3_plug_in_info_acp_err_code",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "plug_in_info_acp_err_code",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/plug_in_info_dcp2_err_code/config",
+        "component": "sensor",
+        "key": "plug_in_info_dcp2_err_code",
+        "unique_id": "opendp3_40c4bd44ff4b_plug_in_info_dcp2_err_code",
+        "object_id": "opendp3_plug_in_info_dcp2_err_code",
+        "default_entity_id": "sensor.opendp3_plug_in_info_dcp2_err_code",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "plug_in_info_dcp2_err_code",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/plug_in_info_dcp_err_code/config",
+        "component": "sensor",
+        "key": "plug_in_info_dcp_err_code",
+        "unique_id": "opendp3_40c4bd44ff4b_plug_in_info_dcp_err_code",
+        "object_id": "opendp3_plug_in_info_dcp_err_code",
+        "default_entity_id": "sensor.opendp3_plug_in_info_dcp_err_code",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "plug_in_info_dcp_err_code",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/plug_in_info_pv_h_type/config",
+        "component": "sensor",
+        "key": "plug_in_info_pv_h_type",
+        "unique_id": "opendp3_40c4bd44ff4b_plug_in_info_pv_h_type",
+        "object_id": "opendp3_plug_in_info_pv_h_type",
+        "default_entity_id": "sensor.opendp3_plug_in_info_pv_h_type",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "plug_in_info_pv_h_type",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/plug_in_info_pv_l_type/config",
+        "component": "sensor",
+        "key": "plug_in_info_pv_l_type",
+        "unique_id": "opendp3_40c4bd44ff4b_plug_in_info_pv_l_type",
+        "object_id": "opendp3_plug_in_info_pv_l_type",
+        "default_entity_id": "sensor.opendp3_plug_in_info_pv_l_type",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "plug_in_info_pv_l_type",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/pow_get_ac_hv_out/config",
+        "component": "sensor",
+        "key": "pow_get_ac_hv_out",
+        "unique_id": "opendp3_40c4bd44ff4b_pow_get_ac_hv_out",
+        "object_id": "opendp3_pow_get_ac_hv_out",
+        "default_entity_id": "sensor.opendp3_pow_get_ac_hv_out",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "pow_get_ac_hv_out",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/pow_get_ac_in/config",
+        "component": "sensor",
+        "key": "pow_get_ac_in",
+        "unique_id": "opendp3_40c4bd44ff4b_pow_get_ac_in",
+        "object_id": "opendp3_pow_get_ac_in",
+        "default_entity_id": "sensor.opendp3_pow_get_ac_in",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "pow_get_ac_in",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/pow_get_ac_lv_out/config",
+        "component": "sensor",
+        "key": "pow_get_ac_lv_out",
+        "unique_id": "opendp3_40c4bd44ff4b_pow_get_ac_lv_out",
+        "object_id": "opendp3_pow_get_ac_lv_out",
+        "default_entity_id": "sensor.opendp3_pow_get_ac_lv_out",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "pow_get_ac_lv_out",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/pow_get_bms/config",
+        "component": "sensor",
+        "key": "pow_get_bms",
+        "unique_id": "opendp3_40c4bd44ff4b_pow_get_bms",
+        "object_id": "opendp3_pow_get_bms",
+        "default_entity_id": "sensor.opendp3_pow_get_bms",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "pow_get_bms",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/pow_get_pv_h/config",
+        "component": "sensor",
+        "key": "pow_get_pv_h",
+        "unique_id": "opendp3_40c4bd44ff4b_pow_get_pv_h",
+        "object_id": "opendp3_pow_get_pv_h",
+        "default_entity_id": "sensor.opendp3_pow_get_pv_h",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "pow_get_pv_h",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/pow_get_pv_l/config",
+        "component": "sensor",
+        "key": "pow_get_pv_l",
+        "unique_id": "opendp3_40c4bd44ff4b_pow_get_pv_l",
+        "object_id": "opendp3_pow_get_pv_l",
+        "default_entity_id": "sensor.opendp3_pow_get_pv_l",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "pow_get_pv_l",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/pow_in_sum_w/config",
+        "component": "sensor",
+        "key": "pow_in_sum_w",
+        "unique_id": "opendp3_40c4bd44ff4b_pow_in_sum_w",
+        "object_id": "opendp3_pow_in_sum_w",
+        "default_entity_id": "sensor.opendp3_pow_in_sum_w",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "pow_in_sum_w",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/opendp3_40c4bd44ff4b/pow_out_sum_w/config",
+        "component": "sensor",
+        "key": "pow_out_sum_w",
+        "unique_id": "opendp3_40c4bd44ff4b_pow_out_sum_w",
+        "object_id": "opendp3_pow_out_sum_w",
+        "default_entity_id": "sensor.opendp3_pow_out_sum_w",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "pow_out_sum_w",
+        "command_topic": null,
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/switch/opendp3_40c4bd44ff4b/cfg_hv_ac_out_open/config",
+        "component": "switch",
+        "key": "cfg_hv_ac_out_open",
+        "unique_id": "opendp3_40c4bd44ff4b_cfg_hv_ac_out_open",
+        "object_id": "opendp3_cfg_hv_ac_out_open",
+        "default_entity_id": "switch.opendp3_cfg_hv_ac_out_open",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "flow_info_ac_hv_out",
+        "command_topic": "opendp3/40c4bd44ff4b/control/cfg_hv_ac_out_open/set",
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": true
+      },
+      {
+        "discovery_topic": "homeassistant/switch/opendp3_40c4bd44ff4b/cfg_lv_ac_out_open/config",
+        "component": "switch",
+        "key": "cfg_lv_ac_out_open",
+        "unique_id": "opendp3_40c4bd44ff4b_cfg_lv_ac_out_open",
+        "object_id": "opendp3_cfg_lv_ac_out_open",
+        "default_entity_id": "switch.opendp3_cfg_lv_ac_out_open",
+        "device_identifiers": [
+          "opendp3_40c4bd44ff4b"
+        ],
+        "state_topic": "opendp3/40c4bd44ff4b/state",
+        "state_key": "flow_info_ac_lv_out",
+        "command_topic": "opendp3/40c4bd44ff4b/control/cfg_lv_ac_out_open/set",
+        "availability_topics": [
+          "opendp3/40c4bd44ff4b/availability",
+          "opendp3/40c4bd44ff4b/state",
+          "opendp3/40c4bd44ff4b/telemetry"
+        ],
+        "control_only": true
+      }
+    ]
+  },
+  "jackery": {
+    "serial": "JKCONTRACT000001",
+    "device_id": "45212785c077",
+    "entities": [
+      {
+        "discovery_topic": "homeassistant/select/jackery_45212785c077/jackery_auto_power_off/config",
+        "component": "select",
+        "key": "jackery_auto_power_off",
+        "unique_id": "jackery_45212785c077_jackery_auto_power_off",
+        "object_id": "jackery_auto_power_off",
+        "default_entity_id": "select.jackery_auto_power_off",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "jackery_auto_power_off",
+        "command_topic": "jackery/45212785c077/control/jackery_auto_power_off/set",
+        "availability_topics": [
+          "jackery/45212785c077/availability",
+          "jackery/45212785c077/control-availability",
+          "jackery/45212785c077/state",
+          "jackery/45212785c077/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/select/jackery_45212785c077/jackery_battery_save/config",
+        "component": "select",
+        "key": "jackery_battery_save",
+        "unique_id": "jackery_45212785c077_jackery_battery_save",
+        "object_id": "jackery_battery_save",
+        "default_entity_id": "select.jackery_battery_save",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "jackery_battery_save",
+        "command_topic": "jackery/45212785c077/control/jackery_battery_save/set",
+        "availability_topics": [
+          "jackery/45212785c077/availability",
+          "jackery/45212785c077/control-availability",
+          "jackery/45212785c077/state",
+          "jackery/45212785c077/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/select/jackery_45212785c077/jackery_charging_mode/config",
+        "component": "select",
+        "key": "jackery_charging_mode",
+        "unique_id": "jackery_45212785c077_jackery_charging_mode",
+        "object_id": "jackery_charging_mode",
+        "default_entity_id": "select.jackery_charging_mode",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "jackery_charging_mode",
+        "command_topic": "jackery/45212785c077/control/jackery_charging_mode/set",
+        "availability_topics": [
+          "jackery/45212785c077/availability",
+          "jackery/45212785c077/control-availability",
+          "jackery/45212785c077/state",
+          "jackery/45212785c077/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/select/jackery_45212785c077/jackery_screen_timeout/config",
+        "component": "select",
+        "key": "jackery_screen_timeout",
+        "unique_id": "jackery_45212785c077_jackery_screen_timeout",
+        "object_id": "jackery_screen_timeout",
+        "default_entity_id": "select.jackery_screen_timeout",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "jackery_screen_timeout",
+        "command_topic": "jackery/45212785c077/control/jackery_screen_timeout/set",
+        "availability_topics": [
+          "jackery/45212785c077/availability",
+          "jackery/45212785c077/control-availability",
+          "jackery/45212785c077/state",
+          "jackery/45212785c077/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/jackery_45212785c077/bms_batt_soc/config",
+        "component": "sensor",
+        "key": "bms_batt_soc",
+        "unique_id": "jackery_45212785c077_bms_batt_soc",
+        "object_id": "jackery_bms_batt_soc",
+        "default_entity_id": "sensor.jackery_bms_batt_soc",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "bms_batt_soc",
+        "command_topic": null,
+        "availability_topics": [
+          "jackery/45212785c077/availability",
+          "jackery/45212785c077/state",
+          "jackery/45212785c077/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/jackery_45212785c077/cms_batt_soc/config",
+        "component": "sensor",
+        "key": "cms_batt_soc",
+        "unique_id": "jackery_45212785c077_cms_batt_soc",
+        "object_id": "jackery_cms_batt_soc",
+        "default_entity_id": "sensor.jackery_cms_batt_soc",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "cms_batt_soc",
+        "command_topic": null,
+        "availability_topics": [
+          "jackery/45212785c077/availability",
+          "jackery/45212785c077/state",
+          "jackery/45212785c077/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/jackery_45212785c077/cms_batt_temp/config",
+        "component": "sensor",
+        "key": "cms_batt_temp",
+        "unique_id": "jackery_45212785c077_cms_batt_temp",
+        "object_id": "jackery_cms_batt_temp",
+        "default_entity_id": "sensor.jackery_cms_batt_temp",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "cms_batt_temp",
+        "command_topic": null,
+        "availability_topics": [
+          "jackery/45212785c077/availability",
+          "jackery/45212785c077/state",
+          "jackery/45212785c077/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/jackery_45212785c077/collector_state/config",
+        "component": "sensor",
+        "key": "collector_state",
+        "unique_id": "jackery_45212785c077_collector_state",
+        "object_id": "jackery_collector_state",
+        "default_entity_id": "sensor.jackery_collector_state",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "collector_state",
+        "command_topic": null,
+        "availability_topics": [
+          "jackery/45212785c077/availability"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/jackery_45212785c077/errcode/config",
+        "component": "sensor",
+        "key": "errcode",
+        "unique_id": "jackery_45212785c077_errcode",
+        "object_id": "jackery_errcode",
+        "default_entity_id": "sensor.jackery_errcode",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "errcode",
+        "command_topic": null,
+        "availability_topics": [
+          "jackery/45212785c077/availability",
+          "jackery/45212785c077/state",
+          "jackery/45212785c077/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/jackery_45212785c077/frame_count/config",
+        "component": "sensor",
+        "key": "frame_count",
+        "unique_id": "jackery_45212785c077_frame_count",
+        "object_id": "jackery_frame_count",
+        "default_entity_id": "sensor.jackery_frame_count",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "frame_count",
+        "command_topic": null,
+        "availability_topics": [
+          "jackery/45212785c077/availability"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/jackery_45212785c077/jackery_ac_frequency_hz/config",
+        "component": "sensor",
+        "key": "jackery_ac_frequency_hz",
+        "unique_id": "jackery_45212785c077_jackery_ac_frequency_hz",
+        "object_id": "jackery_jackery_ac_frequency_hz",
+        "default_entity_id": "sensor.jackery_jackery_ac_frequency_hz",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "jackery_ac_frequency_hz",
+        "command_topic": null,
+        "availability_topics": [
+          "jackery/45212785c077/availability",
+          "jackery/45212785c077/state",
+          "jackery/45212785c077/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/jackery_45212785c077/jackery_ac_input_w/config",
+        "component": "sensor",
+        "key": "jackery_ac_input_w",
+        "unique_id": "jackery_45212785c077_jackery_ac_input_w",
+        "object_id": "jackery_jackery_ac_input_w",
+        "default_entity_id": "sensor.jackery_jackery_ac_input_w",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "jackery_ac_input_w",
+        "command_topic": null,
+        "availability_topics": [
+          "jackery/45212785c077/availability",
+          "jackery/45212785c077/state",
+          "jackery/45212785c077/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/jackery_45212785c077/jackery_ac_voltage_v/config",
+        "component": "sensor",
+        "key": "jackery_ac_voltage_v",
+        "unique_id": "jackery_45212785c077_jackery_ac_voltage_v",
+        "object_id": "jackery_jackery_ac_voltage_v",
+        "default_entity_id": "sensor.jackery_jackery_ac_voltage_v",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "jackery_ac_voltage_v",
+        "command_topic": null,
+        "availability_topics": [
+          "jackery/45212785c077/availability",
+          "jackery/45212785c077/state",
+          "jackery/45212785c077/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/jackery_45212785c077/jackery_auto_off/config",
+        "component": "sensor",
+        "key": "jackery_auto_off",
+        "unique_id": "jackery_45212785c077_jackery_auto_off",
+        "object_id": "jackery_jackery_auto_off",
+        "default_entity_id": "sensor.jackery_jackery_auto_off",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "jackery_auto_off",
+        "command_topic": null,
+        "availability_topics": [
+          "jackery/45212785c077/availability",
+          "jackery/45212785c077/state",
+          "jackery/45212785c077/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/jackery_45212785c077/jackery_charge_mode/config",
+        "component": "sensor",
+        "key": "jackery_charge_mode",
+        "unique_id": "jackery_45212785c077_jackery_charge_mode",
+        "object_id": "jackery_jackery_charge_mode",
+        "default_entity_id": "sensor.jackery_jackery_charge_mode",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "jackery_charge_mode",
+        "command_topic": null,
+        "availability_topics": [
+          "jackery/45212785c077/availability",
+          "jackery/45212785c077/state",
+          "jackery/45212785c077/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/jackery_45212785c077/jackery_charge_time_h/config",
+        "component": "sensor",
+        "key": "jackery_charge_time_h",
+        "unique_id": "jackery_45212785c077_jackery_charge_time_h",
+        "object_id": "jackery_jackery_charge_time_h",
+        "default_entity_id": "sensor.jackery_jackery_charge_time_h",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "jackery_charge_time_h",
+        "command_topic": null,
+        "availability_topics": [
+          "jackery/45212785c077/availability",
+          "jackery/45212785c077/state",
+          "jackery/45212785c077/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/jackery_45212785c077/jackery_emergency_charge/config",
+        "component": "sensor",
+        "key": "jackery_emergency_charge",
+        "unique_id": "jackery_45212785c077_jackery_emergency_charge",
+        "object_id": "jackery_jackery_emergency_charge",
+        "default_entity_id": "sensor.jackery_jackery_emergency_charge",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "jackery_emergency_charge",
+        "command_topic": null,
+        "availability_topics": [
+          "jackery/45212785c077/availability",
+          "jackery/45212785c077/state",
+          "jackery/45212785c077/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/jackery_45212785c077/jackery_energy_saving_mode/config",
+        "component": "sensor",
+        "key": "jackery_energy_saving_mode",
+        "unique_id": "jackery_45212785c077_jackery_energy_saving_mode",
+        "object_id": "jackery_jackery_energy_saving_mode",
+        "default_entity_id": "sensor.jackery_jackery_energy_saving_mode",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "jackery_energy_saving_mode",
+        "command_topic": null,
+        "availability_topics": [
+          "jackery/45212785c077/availability",
+          "jackery/45212785c077/state",
+          "jackery/45212785c077/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/jackery_45212785c077/jackery_light_mode/config",
+        "component": "sensor",
+        "key": "jackery_light_mode",
+        "unique_id": "jackery_45212785c077_jackery_light_mode",
+        "object_id": "jackery_jackery_light_mode",
+        "default_entity_id": "sensor.jackery_jackery_light_mode",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "jackery_light_mode",
+        "command_topic": null,
+        "availability_topics": [
+          "jackery/45212785c077/availability",
+          "jackery/45212785c077/state",
+          "jackery/45212785c077/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/jackery_45212785c077/jackery_low_power_mode/config",
+        "component": "sensor",
+        "key": "jackery_low_power_mode",
+        "unique_id": "jackery_45212785c077_jackery_low_power_mode",
+        "object_id": "jackery_jackery_low_power_mode",
+        "default_entity_id": "sensor.jackery_jackery_low_power_mode",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "jackery_low_power_mode",
+        "command_topic": null,
+        "availability_topics": [
+          "jackery/45212785c077/availability",
+          "jackery/45212785c077/state",
+          "jackery/45212785c077/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/jackery_45212785c077/jackery_output_time_h/config",
+        "component": "sensor",
+        "key": "jackery_output_time_h",
+        "unique_id": "jackery_45212785c077_jackery_output_time_h",
+        "object_id": "jackery_jackery_output_time_h",
+        "default_entity_id": "sensor.jackery_jackery_output_time_h",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "jackery_output_time_h",
+        "command_topic": null,
+        "availability_topics": [
+          "jackery/45212785c077/availability",
+          "jackery/45212785c077/state",
+          "jackery/45212785c077/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/jackery_45212785c077/last_frame/config",
+        "component": "sensor",
+        "key": "last_frame",
+        "unique_id": "jackery_45212785c077_last_frame",
+        "object_id": "jackery_last_frame",
+        "default_entity_id": "sensor.jackery_last_frame",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "last_frame",
+        "command_topic": null,
+        "availability_topics": [
+          "jackery/45212785c077/availability"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/jackery_45212785c077/pow_in_sum_w/config",
+        "component": "sensor",
+        "key": "pow_in_sum_w",
+        "unique_id": "jackery_45212785c077_pow_in_sum_w",
+        "object_id": "jackery_pow_in_sum_w",
+        "default_entity_id": "sensor.jackery_pow_in_sum_w",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "pow_in_sum_w",
+        "command_topic": null,
+        "availability_topics": [
+          "jackery/45212785c077/availability",
+          "jackery/45212785c077/state",
+          "jackery/45212785c077/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/sensor/jackery_45212785c077/pow_out_sum_w/config",
+        "component": "sensor",
+        "key": "pow_out_sum_w",
+        "unique_id": "jackery_45212785c077_pow_out_sum_w",
+        "object_id": "jackery_pow_out_sum_w",
+        "default_entity_id": "sensor.jackery_pow_out_sum_w",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "pow_out_sum_w",
+        "command_topic": null,
+        "availability_topics": [
+          "jackery/45212785c077/availability",
+          "jackery/45212785c077/state",
+          "jackery/45212785c077/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/switch/jackery_45212785c077/jackery_ac_output/config",
+        "component": "switch",
+        "key": "jackery_ac_output",
+        "unique_id": "jackery_45212785c077_jackery_ac_output",
+        "object_id": "jackery_ac_output",
+        "default_entity_id": "switch.jackery_ac_output",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "jackery_ac_output",
+        "command_topic": "jackery/45212785c077/control/jackery_ac_output/set",
+        "availability_topics": [
+          "jackery/45212785c077/availability",
+          "jackery/45212785c077/control-availability",
+          "jackery/45212785c077/state",
+          "jackery/45212785c077/telemetry"
+        ],
+        "control_only": false
+      },
+      {
+        "discovery_topic": "homeassistant/switch/jackery_45212785c077/jackery_dc_output/config",
+        "component": "switch",
+        "key": "jackery_dc_output",
+        "unique_id": "jackery_45212785c077_jackery_dc_output",
+        "object_id": "jackery_dc_output",
+        "default_entity_id": "switch.jackery_dc_output",
+        "device_identifiers": [
+          "jackery_45212785c077"
+        ],
+        "state_topic": "jackery/45212785c077/state",
+        "state_key": "jackery_dc_output",
+        "command_topic": "jackery/45212785c077/control/jackery_dc_output/set",
+        "availability_topics": [
+          "jackery/45212785c077/availability",
+          "jackery/45212785c077/control-availability",
+          "jackery/45212785c077/state",
+          "jackery/45212785c077/telemetry"
+        ],
+        "control_only": false
+      }
+    ]
+  }
+}

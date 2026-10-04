@@ -4,6 +4,8 @@ The setup form lives here as a widget so the Settings page and the first-run mod
 dialog share one implementation, one validation path, and one set of warnings.
 """
 import asyncio
+from dataclasses import replace
+import os
 
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QHBoxLayout, QLineEdit,
@@ -25,9 +27,11 @@ BRIDGE = ("Publishes the current DP3 and Jackery readings to a Home Assistant MQ
           "connection is outbound only: OpenPowerstation never listens for one. Recording continues "
           "normally if the broker is unreachable. Leave the address empty to publish nothing.")
 BRIDGE_SECURITY = ("The broker password is stored in config.json beside your recordings, "
-                   "encrypted with Windows DPAPI to this account -- another account on this "
-                   "PC can't read it back out. Still use a Home Assistant user created only "
-                   "for this, so it grants nothing beyond the broker.")
+                   + ("encrypted with Windows DPAPI to this account -- another account on this "
+                      "PC can't read it back out. " if os.name == "nt" else
+                      "in a file only this account can read. ")
+                   + "Still use a Home Assistant user created only for this, so it grants "
+                   "nothing beyond the broker.")
 CONTROL = ("Lets Home Assistant control the DP3 HV/LV AC outputs and the Jackery AC/DC "
            "outputs, Battery Saving Mode, and screen timeout. Everything else stays blocked: "
            "power-off, factory reset, Wi-Fi, firmware and arbitrary battery-boundary writes "
@@ -37,8 +41,9 @@ CONTROL_CAUTION = ("Anything with access to your broker can change these device 
                    "a write succeeded; a control is unavailable when its readback is stale or "
                    "missing. Do not enable this if an output or setting change could interrupt "
                    "something important.")
-MQTT_FIELDS = ("mqtt_host", "mqtt_port", "mqtt_username", "mqtt_password", "mqtt_tls",
-               "mqtt_interval", "allow_control")
+COLLECT = ("Each battery accepts one Bluetooth connection. Where another machine records "
+           "them -- a Home Assistant Raspberry Pi, say -- turn this off: this PC then only "
+           "views recordings, and can never take a battery from that machine.")
 
 
 class SetupForm(QWidget):
@@ -94,6 +99,11 @@ class SetupForm(QWidget):
         form.addRow("Suspect temperature change", self.jump)
         form.addRow("Within", self.window_seconds)
         layout.addLayout(form)
+        self.collect = QCheckBox("Record the batteries from this PC")
+        self.collect.setChecked(True)
+        self.collect.setAccessibleName("Record the batteries from this PC; off makes it a viewer")
+        layout.addWidget(self.collect)
+        layout.addWidget(label(COLLECT, "faint", wrap=True))
         self.status = label(IDLE_STATUS, "muted", wrap=True)
         layout.addWidget(self.status)
         self.load()
@@ -110,6 +120,7 @@ class SetupForm(QWidget):
         self.conditions.setText(config.conditions)
         self.jump.setValue(config.temperature_jump)
         self.window_seconds.setValue(config.temperature_window)
+        self.collect.setChecked(config.role == "collector")
 
     def scan(self):
         from ...ble import scan
@@ -155,16 +166,20 @@ class SetupForm(QWidget):
             self.status.setText("Scan and select your DP3 first.")
             return False
         path = self.root / "config.json"
-        config = Config(*device, self.user_id.text().strip(), self.region.currentText(),
-                        self.firmware.text(), self.conditions.text(),
-                        self.jump.value(), self.window_seconds.value())
-        # Bridge settings have their own card; carry them through untouched.
+        edited = dict(address=device[0], serial=device[1], user_id=self.user_id.text().strip(),
+                      region=self.region.currentText(), firmware=self.firmware.text(),
+                      conditions=self.conditions.text(), temperature_jump=self.jump.value(),
+                      temperature_window=self.window_seconds.value(),
+                      role="collector" if self.collect.isChecked() else "viewer")
+        # Everything this form does not edit -- the broker card's settings, the
+        # Explorer serial -- is carried through from the saved file untouched.
+        # Listing what to keep instead dropped every field added since, so a
+        # save quietly reset a viewer install to the default role.
         try:
             saved = load_config(path)
         except (FileNotFoundError, ValueError, TypeError):
             saved = None
-        for name in MQTT_FIELDS if saved else ():
-            setattr(config, name, getattr(saved, name))
+        config = replace(saved, **edited) if saved else Config(**edited)
         try:
             save_config(config, path)
         except (ValueError, OSError) as exc:

@@ -56,12 +56,18 @@ def newest_frame(database: Path) -> int | None:
 def configured_devices(data: Path) -> dict[str, bool]:
     """Which devices this machine records, by the same tests start_all applies.
 
-    The DP3 needs a saved setup; the Jackery needs its serial in the
-    environment. A device that is not set up has no workers to start and no
-    recording to go stale, so it must not keep the watchdog unhealthy.
+    The DP3 needs a saved setup; the Jackery needs its serial in that setup.
+    A device that is not set up has no workers to start and no recording to
+    go stale, so it must not keep the watchdog unhealthy.
     """
-    return {"DP3": (data / "config.json").exists(),
-            "Jackery": start_all.jackery_serial() is not None}
+    if not (data / "config.json").exists():
+        return {"DP3": False, "Jackery": False}
+    try:
+        jackery = bool(start_all.configured_jackery(data))
+    except ValueError:
+        # An unreadable setup starts no Jackery worker either.
+        jackery = False
+    return {"DP3": True, "Jackery": jackery}
 
 
 def lock_held(path: Path) -> bool:
@@ -183,7 +189,14 @@ def main() -> int:
     log_path = args.data_dir / "watchdog.log"
     logging.basicConfig(filename=log_path, level=logging.INFO,
                         format="%(asctime)s %(levelname)s %(message)s")
-    return run(args.data_dir.resolve())
+    data = args.data_dir.resolve()
+    # Supervising here means starting collectors, which a viewer install may
+    # not have; a scheduled task left registered then does nothing at all.
+    from openpowerstation.config import VIEWER_REFUSAL, install_role
+    if install_role(data / "config.json") != "collector":
+        logging.warning("%s Not supervising.", VIEWER_REFUSAL)
+        return 0
+    return run(data)
 
 
 if __name__ == "__main__":

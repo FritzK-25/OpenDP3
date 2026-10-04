@@ -248,7 +248,7 @@ def _discovery_fakes(monkeypatch, serials):
 async def test_discover_reader_skips_other_explorers_when_given_a_serial(monkeypatch):
     jackery, opened = _discovery_fakes(monkeypatch, ["111111111111111", "222222222222222"])
 
-    reader = await jackery.discover_reader(1, "222222222222222")
+    reader = await jackery.discover_reader(1, serial="222222222222222")
 
     assert reader.identity.serial == "222222222222222"
     assert opened == ["222222222222222"]

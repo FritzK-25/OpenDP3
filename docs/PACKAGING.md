@@ -37,6 +37,11 @@ Use Windows x64 with Python 3.12. From the project root:
     .\.venv\Scripts\python.exe -m pip install --no-deps -e .
     .\.venv\Scripts\python.exe -m pip install -r packaging/requirements-build.txt
 
+The build needs `.venv` to be exactly this. It refuses an environment that
+differs from those pins (see [Build details](#build-details)), so install other
+tools into a separate environment. Rebuild `.venv` after a dependency update
+lands in `requirements.txt`.
+
 ## Cutting a release
 
 One command runs the whole chain: tests, then build, then frozen verification.
@@ -102,6 +107,19 @@ Only source modules, library dependencies, an original icon, and public
 notices/documentation are included. data/, config.json, recordings, account
 IDs, login tokens, session keys, and raw evidence archives are not build inputs.
 Dependency notices are available inside Help > Third-party licenses.
+
+`packaging/prepare.py` generates those notices into `artifacts/package-licenses`
+from the lock, not from whatever is installed. The lock is `requirements.lock`
+plus `packaging/requirements-build.txt`, because PyInstaller's bootloader is part
+of the executable. The test and build tooling those files also pin ships no
+notice. The folder is rebuilt from scratch on every run, so a package dropped
+from the lock takes its notice with it. The executable bundles what is
+installed, so `prepare.py` stops the build when the environment and the lock
+disagree in any direction: a package pinned but not installed, installed but
+not pinned, or installed at another version. It also refuses a requirement that
+is not an exact `name==version` pin. A refused run leaves no notices behind.
+The tests run copies of `prepare.py` in temporary trees, so a test run never
+rewrites the notices a build ships.
 
 ## Verify the actual executable
 

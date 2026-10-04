@@ -155,3 +155,24 @@ async def test_login_bad_responses_are_sanitized(monkeypatch, body):
         await resolve_user_id("email@example.test", "PRIVATE_PASSWORD", "US")
     assert "PRIVATE" not in str(error.value)
     assert request_bodies == [{}]  # Request-body references released on failure too.
+
+
+def test_the_security_document_names_every_field_either_device_can_be_sent():
+    """SECURITY.md is the device-write boundary; it cannot fall behind the allowlists.
+
+    Charging mode (``cs``) and Auto Power-Off (``pm``) were added to the
+    Jackery allowlist without it, which left the document saying no power-off
+    was enabled while a power-off timer was on the Power dashboard.
+    """
+    from pathlib import Path
+    from openpowerstation.jackery import JACKERY_CONTROLS
+    from openpowerstation.protocol import CONTROL_FIELDS
+
+    text = (Path(__file__).resolve().parents[1] / "docs" / "SECURITY.md").read_text(encoding="utf-8")
+    names = set(CONTROL_FIELDS)
+    for spec in JACKERY_CONTROLS.values():
+        names |= {spec["wire"], spec.get("command_wire", spec["wire"])}
+    # As a code span: a two-letter wire name such as cs would match inside
+    # ordinary words.
+    missing = sorted(name for name in names if f"`{name}`" not in text)
+    assert not missing, f"SECURITY.md does not name {missing}"
