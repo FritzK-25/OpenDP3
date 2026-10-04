@@ -32,7 +32,9 @@ def settings():
                   allow_control=True)
 
 
-def wait_for(predicate, timeout=5.0):
+def wait_for(predicate, timeout=30.0):
+    # Generous: a loaded Windows runner has taken over five seconds to bring a
+    # service to recording. A passing run never waits this long.
     deadline = time.monotonic() + timeout
     while not predicate():
         assert time.monotonic() < deadline, "Timed out"

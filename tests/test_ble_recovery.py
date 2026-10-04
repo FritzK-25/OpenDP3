@@ -609,7 +609,9 @@ def test_a_dp3_handshake_that_never_answers_gives_the_adapter_back(tmp_path, mon
     service = Service(settings, tmp_path / "recording.sqlite", lock_dir=tmp_path / "locks")
     service.start()
     try:
-        deadline = time.monotonic() + 5
+        # Generous: a loaded Windows runner has taken over five seconds to
+        # get here. A passing run never waits this long.
+        deadline = time.monotonic() + 30
         while not writes and time.monotonic() < deadline:
             time.sleep(0.01)
         assert writes, "the handshake never reached its first write"
