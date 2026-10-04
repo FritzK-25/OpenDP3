@@ -283,7 +283,9 @@ def test_short_window_scrolls_complete_charts_without_double_wheel_action(viewer
     QApplication.processEvents()
     scroll = overview.chart_scroll
     assert scroll.verticalScrollBar().maximum() > 0
-    for panel in overview.panels.values():
+    # A DP3 session has no voltage, frequency or estimated-time panel to lay out.
+    assert overview.groups == ("temperature", "power", "soc", "state")
+    for panel in (overview.panels[group] for group in overview.groups):
         assert panel.rect().contains(panel.plot.geometry())
         assert panel.plot.width() <= scroll.viewport().width()
     bottom = overview.panels["state"]
@@ -373,8 +375,9 @@ def test_focus_gives_inspection_space_and_preserves_time_on_return(viewer, qtbot
     QApplication.processEvents()
     assert overview.cards_widget.isVisible()
     assert overview.focused_group is None
-    for other in overview.panels.values():
-        assert other.isVisible()
+    for key, other in overview.panels.items():
+        # Back to every panel the DP3 session has, and none it has not.
+        assert other.isVisible() == (key in ("temperature", "power", "soc", "state"))
         assert other.plot.viewRange()[0] == pytest.approx(target)
 
 

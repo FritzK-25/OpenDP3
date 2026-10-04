@@ -56,6 +56,94 @@ async def test_corrupt_outer_frame_recovers(packet):
     assert await buf.feed(bytes(broken)+wire) == [raw]
     assert buf.discarded == len(wire)
 
+async def type7_wires(packet, count, enc):
+    codec = EncPacketAssembler(enc)
+    raws = [packet(seq=n, bms_max_cell_temp=20 + n) for n in range(1, count + 1)]
+    return raws, [await codec.encode(parse_packet(raw)) for raw in raws]
+
+async def test_a_frame_cut_short_costs_only_itself(packet):
+    """A notification lost mid-frame must not take the next frame with it.
+
+    The checksum failure discarded the whole span the cut frame claimed, which
+    held the start of the next one; the vendored reassembler WireBuffer
+    replaced moves on and keeps it. Every cut point, delivered in one
+    notification and a byte at a time.
+    """
+    enc = Type7Encryption(b"x"*16, b"y"*16)
+    raws, wires = await type7_wires(packet, 3, enc)
+    for cut in range(1, len(wires[0])):
+        stream = wires[0][:cut] + wires[1] + wires[2]
+        whole = WireBuffer(7, enc)
+        assert await whole.feed(stream) == raws[1:], f"cut at {cut}"
+        assert whole.discarded == cut, f"cut at {cut}"
+        trickle, got = WireBuffer(7, enc), []
+        for byte in stream:
+            got.extend(await trickle.feed(bytes([byte])))
+        assert got == raws[1:], f"cut at {cut}, a byte at a time"
+
+async def test_a_length_that_never_arrives_holds_back_nothing(packet):
+    """A header claiming more than follows must not stall the frames behind it.
+
+    WireBuffer waited for the whole claimed span, up to 10,000 bytes or tens of
+    seconds of DP3 telemetry, and then discarded every frame inside it. A
+    complete frame with a valid checksum inside the span shows the header was
+    not one, so each frame is delivered as it completes.
+    """
+    enc = Type7Encryption(b"x"*16, b"y"*16)
+    raws, wires = await type7_wires(packet, 30, enc)
+    stray = b"\x5a\x5a\x10\x01" + (4000).to_bytes(2, "little")
+    buf = WireBuffer(7, enc)
+    got = [await buf.feed((stray if n == 0 else b"") + wire) for n, wire in enumerate(wires)]
+    assert got == [[raw] for raw in raws]
+    assert buf.discarded == len(stray)
+
+async def test_type7_resync_keeps_every_frame_the_vendored_reassembler_keeps(packet):
+    """Damaged streams, fed to both in the same notification-sized pieces.
+
+    Frames lose their tail or a stretch of their middle, or carry a flipped
+    bit, with stray bytes and plausible headers between them. WireBuffer has to
+    deliver every intact frame the vendored reassembler delivers, in order.
+    """
+    import random
+    enc = Type7Encryption(b"x"*16, b"y"*16)
+    codec = EncPacketAssembler(enc)
+    for seed in range(200):
+        rng = random.Random(seed)
+        stream, intact = b"", []
+        for seq in range(1, rng.randrange(3, 10)):
+            raw = packet(seq=seq, bms_max_cell_temp=rng.randrange(10, 40),
+                         pow_in_sum_w=float(rng.randrange(3000)))
+            wire = await codec.encode(parse_packet(raw))
+            roll = rng.random()
+            if roll < 0.15:
+                wire = wire[:rng.randrange(1, len(wire))]
+            elif roll < 0.25:
+                cut = rng.randrange(len(wire))
+                wire = wire[:cut] + wire[cut + rng.randrange(1, 40):]
+            elif roll < 0.35:
+                damaged = bytearray(wire)
+                damaged[rng.randrange(len(damaged))] ^= 1 << rng.randrange(8)
+                wire = bytes(damaged)
+            else:
+                intact.append(raw)
+            junk = rng.random()
+            if junk < 0.1:
+                stream += b"\x5a"
+            elif junk < 0.2:
+                stream += b"\x5a\x5a\x10\x01" + rng.randrange(2, 10_001).to_bytes(2, "little")
+            stream += wire
+        ours, theirs = WireBuffer(7, enc), EncPacketAssembler(enc)
+        got_ours, got_theirs, at = [], [], 0
+        while at < len(stream):
+            size = rng.choice([1, 20, 182, 244, 512])
+            got_ours += await ours.feed(stream[at:at + size])
+            got_theirs += await theirs.reassemble(stream[at:at + size])
+            at += size
+        kept = [raw for raw in got_ours if raw in intact]
+        assert kept == [raw for raw in intact if raw in kept], f"seed {seed}: out of order"
+        lost = [raw for raw in got_theirs if raw in intact and raw not in kept]
+        assert not lost, f"seed {seed}: {len(lost)} frame(s) the vendored reassembler kept"
+
 async def test_simple_frame_embedded_prefix_and_bounds():
     payload = b"\x01\0\x5a\x5a"+b"x"*40
     wire = SimplePacketAssembler.encode(payload)

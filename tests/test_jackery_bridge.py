@@ -6,11 +6,15 @@ actually returned over local BLE.
 """
 import contextlib
 import json
+import time
 from types import SimpleNamespace
 
+import pytest
+
+from openpowerstation import jackery_bridge
 from openpowerstation.config import Config
 from openpowerstation.jackery import JACKERY_CONTROLS
-from openpowerstation.jackery_bridge import JackeryBridge, discovery_payloads
+from openpowerstation.jackery_bridge import JackeryBridge, discovery_payloads, state_payload
 from openpowerstation.jackery_fields import map_properties
 from openpowerstation.recorder import Recorder
 from openpowerstation.storage import Store
@@ -79,6 +83,71 @@ def test_local_ble_recording_reaches_home_assistant(tmp_path):
                for topic, payload_, _ in client.published)
 
 
+def test_every_mapped_property_reaches_its_own_entity(tmp_path):
+    """A field the station reports must not vanish between mapping and publication.
+
+    The low-power branch derived the Battery Saving select and dropped the raw
+    reading, so the discovered Low-power mode sensor sat unavailable in
+    production while the recorder logged lps on every poll.
+    """
+    path = tmp_path / "jackery.sqlite"
+    properties = dict(BLE_PROPERTIES, lps=1)
+    with record_ble_observation(path, properties):
+        payload, _ = published_state(path)
+    assert [key for key in map_properties(properties) if payload.get(key) is None] == []
+    # One observation feeds both the raw sensor and the select derived from it.
+    assert payload["jackery_low_power_mode"] == 1.0
+    assert payload["jackery_battery_save"] == "save"
+
+
+def published_from(properties, now=1_000_000_000):
+    """The state a live reading of these station properties publishes."""
+    reading = {"session": {"synthetic": False, "status": "recording"},
+               "last_utc_ns": now, "count": 1,
+               "values": {key: {"value": value, "quality": "ble_observed", "utc_ns": now, "t": 0.0}
+                          for key, value in map_properties(properties).items()}}
+    payload, live = state_payload(reading, now_ns=now)
+    assert live
+    return payload
+
+
+@pytest.mark.parametrize("wire,raw", [
+    ("lps", 0), ("lps", 1), ("lps", 2), ("lps", 7), ("lps", 1.5),
+    ("cs", 1), ("cs", 2), ("pm", 720), ("pm", 60), ("sltb", 3),
+])
+def test_a_select_publishes_one_of_its_options_or_nothing(wire, raw):
+    """Home Assistant rejects a select state outside its options.
+
+    It logs an error and keeps showing the previous option as the current one,
+    so a reading that names no option must make the select unavailable rather
+    than stale. lps=2 used to publish "custom", any other value "unknown", and
+    a fractional value was truncated into a real option.
+    """
+    payload = published_from(dict(BLE_PROPERTIES, **{wire: raw}))
+    options = {config["object_id"]: config["options"]
+               for config in discovery_payloads(SERIAL).values() if "options" in config}
+    assert set(options) == {control for control, spec in JACKERY_CONTROLS.items()
+                            if spec["kind"] == "select"}
+    for select, choices in options.items():
+        assert payload[select] is None or payload[select] in choices, (select, payload[select])
+    if wire == "lps":
+        # The raw reading stays visible even when it names no option.
+        assert payload["jackery_low_power_mode"] == raw
+        assert payload["jackery_battery_save"] == {0: "full", 1: "save"}.get(raw)
+
+
+def test_every_select_reads_back_from_the_field_its_command_writes():
+    """The readback table cannot drift from the controls or the property map."""
+    readback = jackery_bridge.SELECT_READBACK
+    selects = {control for control, spec in JACKERY_CONTROLS.items() if spec["kind"] == "select"}
+    assert set(readback.values()) == selects
+    for control in selects:
+        spec = JACKERY_CONTROLS[control]
+        mapped = map_properties({spec["wire"]: next(iter(spec["values"].values()))})
+        assert len(mapped) == 1, control
+        assert readback[next(iter(mapped))] == control
+
+
 def test_the_bridge_backfill_keeps_the_recorded_transport(tmp_path, monkeypatch):
     """publish_once re-derives mapped fields from the stored raw frame.
 
@@ -125,41 +194,21 @@ def test_enabled_jackery_bridge_announces_and_queues_controls(tmp_path):
     bridge.on_connect(client, None, None, 0)
     assert client.subscribed == [(f"{bridge.base}/control/+/set", 1), ("homeassistant/status", 1)]
     assert (bridge.base + "/control-availability", "online", True) in client.published
+    before = time.time_ns()
     bridge.on_message(client, None, SimpleNamespace(
         topic=f"{bridge.base}/control/jackery_battery_save/set", payload=b"save"))
-    request = next((tmp_path / "jackery-commands").glob("*.json"))
-    assert json.loads(request.read_text("utf-8")) == {
-        "control": "jackery_battery_save", "value": "save"
-    }
-
-
-def test_jackery_control_queue_is_bounded_without_collector(tmp_path, monkeypatch):
-    """The recorder drains only while attached, so presses must not pile up."""
-    from openpowerstation.bridge import CONTROL_QUEUE_MAX_FILES
-    database = tmp_path / "jackery.sqlite"
-    config = Config(address="AA:BB:CC:DD:EE:FF", serial=SERIAL, user_id="0",
-                    mqtt_host="broker.invalid", allow_control=True)
-    bridge = JackeryBridge(config, database, serial=SERIAL, client=FakeClient())
-    total = CONTROL_QUEUE_MAX_FILES + 25
-    ticks = iter(10**18 + index for index in range(total))
-    monkeypatch.setattr("openpowerstation.bridge.time.time_ns", lambda: next(ticks))
-
-    for index in range(total):
-        bridge.queue_control("jackery_ac_output", "ON" if index == total - 1 else "OFF")
-
-    queued = sorted((tmp_path / "jackery-commands").glob("*.json"))
-    assert len(queued) == CONTROL_QUEUE_MAX_FILES
-    assert queued[0].name.startswith(str(10**18 + total - CONTROL_QUEUE_MAX_FILES))
-    assert json.loads(queued[-1].read_text("utf-8")) == {
-        "control": "jackery_ac_output", "value": True
-    }
+    request = json.loads(next((tmp_path / "jackery-commands").glob("*.json")).read_text("utf-8"))
+    issued = request.pop("issued_utc_ns")
+    assert request == {"key": "jackery_battery_save", "value": "save"}
+    # Dated by the bridge as it queues, for the collector to age it by.
+    assert before <= issued <= time.time_ns()
 
 
 def test_every_jackery_control_stays_discovered_even_when_writes_are_disabled():
     # Control definitions are structural. Whether they can act is a separate
     # retained availability topic, so a rebuild or BLE outage cannot delete the
     # entity from dashboards and produce "Entity not found".
-    payloads = discovery_payloads(SERIAL, control=False)
+    payloads = discovery_payloads(SERIAL)
     controls = {payload["object_id"]: payload for payload in payloads.values()
                 if payload.get("command_topic")}
     assert set(controls) == set(JACKERY_CONTROLS)
@@ -213,21 +262,6 @@ def test_jackery_reannounces_after_home_assistant_restart(tmp_path):
     bridge.announced = True
     bridge.on_message(client, None, SimpleNamespace(topic="homeassistant/status", payload=b"online"))
     assert not bridge.announced
-
-
-def test_jackery_periodically_refreshes_discovery(tmp_path, monkeypatch):
-    import openpowerstation.jackery_bridge as module
-    client = FakeClient()
-    config = Config(address="AA:BB:CC:DD:EE:FF", serial=SERIAL, user_id="0",
-                    mqtt_host="broker.invalid", allow_control=True)
-    bridge = JackeryBridge(config, tmp_path / "jackery.sqlite", serial=SERIAL, client=client)
-    clock = iter((10.0, 71.0, 71.0))
-    monkeypatch.setattr(module.time, "monotonic", lambda: next(clock))
-    bridge.publish_once()
-    first = len([t for t, _, _ in client.published if t.startswith("homeassistant/")])
-    bridge.publish_once()
-    second = len([t for t, _, _ in client.published if t.startswith("homeassistant/")])
-    assert second > first
 
 
 def test_jackery_discovery_clears_legacy_binary_sensor_controls(tmp_path):
@@ -284,10 +318,94 @@ def test_a_recorder_that_died_stops_reading_as_live(tmp_path):
     with record_ble_observation(path):
         payload, _ = published_state(path)
         assert payload["collector_state"] == "recording"
-        reading = {"session": {"status": "recording"}, "count": 1,
-                   "last_utc_ns": clock.time_ns(), "values": {}}
+        # What latest() returns once that process is gone: its last reading, aging.
+        last = clock.time_ns()
+        reading = {"session": {"synthetic": False, "status": "recording"}, "count": 1,
+                   "last_utc_ns": last,
+                   "values": {"bms_batt_soc": {"value": 100.0, "quality": "ble_observed",
+                                               "utc_ns": last, "t": 0.0}}}
         aged = clock.time_ns() + int((STALE_SECONDS + 5) * 1e9)
         stale_payload, live = state_payload(reading, now_ns=aged)
     assert not live
     assert stale_payload["collector_state"] == "stale"
     assert stale_payload["bms_batt_soc"] is None, "stale values were still published"
+
+
+def ingest(recorder, properties, *, serial=SERIAL, t=None):
+    """Record one reply the way `jackery-record` does; ``t`` seconds into the session."""
+    fields = {"device": {"serial": serial, "model": "Explorer 1000 v2", "transport": "ble"},
+              "properties": properties}
+    at = {} if t is None else {"utc_ns": recorder.start_utc + int(t * 1e9),
+                               "mono_ns": recorder.start_mono + int(t * 1e9)}
+    recorder.ingest_observation(json.dumps(fields, sort_keys=True).encode(), fields,
+                                map_properties(properties), quality="ble_observed", **at)
+
+
+def test_a_collector_still_searching_reads_as_waiting_not_stopped(tmp_path):
+    """The collector opens its session before it finds the Explorer.
+
+    Until its first frame, that session has nothing to prove whose it is, and
+    was skipped: the bridge published the finished session before it as
+    "stopped" for as long as the search lasted -- hours, in production -- as
+    though the collector had been stopped on purpose.
+    """
+    path = tmp_path / "jackery.sqlite"
+    with Store(path, reserve_bytes=0) as store:
+        earlier = Recorder(store, firmware=f"Jackery Explorer 1000 v2 {SERIAL}")
+        ingest(earlier, BLE_PROPERTIES)
+        earlier.finish("stopped")
+        searching = Recorder(store, firmware=f"Jackery Explorer 1000 v2 {SERIAL}",
+                             conditions="Jackery local BLE transport")
+        payload, client = published_state(path)
+        assert payload["collector_state"] == "waiting", payload["collector_state"]
+        assert payload["bms_batt_soc"] is None
+        assert payload["last_frame"] is None
+        assert ("jackery/" + jackery_bridge.device_id(SERIAL) + "/telemetry", "offline", True
+                ) in client.published
+        # Found: the same session now carries the reading, and it is published.
+        ingest(searching, BLE_PROPERTIES)
+        payload, _ = published_state(path)
+    assert payload["collector_state"] == "recording"
+    assert payload["bms_batt_soc"] == 100.0
+
+
+def test_another_explorers_empty_session_is_not_taken_for_ours(tmp_path):
+    """Only a session opened for this serial can stand for its collector."""
+    path = tmp_path / "jackery.sqlite"
+    with Store(path, reserve_bytes=0) as store:
+        ours = Recorder(store, firmware=f"Jackery Explorer 1000 v2 {SERIAL}")
+        ingest(ours, BLE_PROPERTIES)
+        ours.finish("stopped")
+        Recorder(store, firmware="Jackery Explorer 1000 v2 856124082499999")
+        payload, _ = published_state(path)
+    assert payload["collector_state"] == "stopped"
+
+
+def test_settings_alone_do_not_keep_the_jackery_live(tmp_path):
+    """Liveness follows the core telemetry, as the DP3 bridge's has since #201.
+
+    It followed the newest frame of any kind, so a station answering only
+    settings fields kept collector_state "recording" and telemetry online while
+    SOC and power aged out underneath it.
+    """
+    from openpowerstation.queries import latest
+    path = tmp_path / "jackery.sqlite"
+    with Store(path, reserve_bytes=0) as store:
+        recorder = Recorder(store, firmware=f"Jackery Explorer 1000 v2 {SERIAL}")
+        ingest(recorder, BLE_PROPERTIES, t=0)
+        ingest(recorder, {"sltb": 1, "ec": 0, "pmb": 0}, t=40)
+        reading = latest(path, recorder.sid,
+                         keys=[entity.key for entity in jackery_bridge.jackery_entities()])
+        payload, live = state_payload(reading, now_ns=recorder.start_utc + 41 * 10**9)
+    assert not live, "settings alone kept the Jackery telemetry online"
+    assert payload["collector_state"] == "stale"
+    assert payload["jackery_screen_timeout"] is None
+
+
+def test_the_core_telemetry_keys_are_defined_once():
+    """The collector, the bridge and the supervisor's lease all key health on these."""
+    from openpowerstation.jackery_fields import JACKERY_CORE_KEYS
+    assert jackery_bridge.LOGGED_FIELD_AGES is JACKERY_CORE_KEYS
+    published = {entity.key for entity in jackery_bridge.jackery_entities()}
+    assert set(JACKERY_CORE_KEYS) <= published
+    assert set(JACKERY_CORE_KEYS) <= set(map_properties(BLE_PROPERTIES))

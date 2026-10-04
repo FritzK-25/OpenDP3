@@ -368,7 +368,8 @@ def test_settings_page_validation(qtbot, tmp_path, monkeypatch):
     window.pages["settings"].save()
     saved = json.loads((tmp_path / "config.json").read_text("utf-8"))
     assert saved["serial"] == "MR51ABCDEFGH1234"
-    assert saved["user_id"] == "1234567890"
+    # Read back through load_config: on Windows the file holds it DPAPI-protected.
+    assert load_config(tmp_path / "config.json").user_id == "1234567890"
     # The EcoFlow account password is never part of the saved configuration.
     assert "password" not in saved and saved["mqtt_password"] == ""
     assert window.sidebar.device_detail.text() == "Serial MR51ABCDEFGH1234"
@@ -534,4 +535,49 @@ def test_bridge_and_bluetooth_cards_never_overwrite_each_other(qtbot, tmp_path):
     assert saved["mqtt_password"] == "" and saved["mqtt_password_dpapi"]
     assert load_config(tmp_path / "config.json").mqtt_password == "BROKER_SECRET"
     assert saved["mqtt_interval"] == 15
+    close_window(window)
+
+
+def test_a_viewer_install_offers_no_recording(qtbot, tmp_path):
+    """One click on Start recording, on a PC kept for viewing, used to take the
+    DP3 from the Pi the next time the Pi's link dropped."""
+    from openpowerstation.config import VIEWER_REFUSAL, Config, save_config
+    save_config(Config("AA:BB:CC:DD:EE:FF", "MR51ABCDEFGH1234", "1234567", role="viewer"),
+                tmp_path / "config.json")
+    window = Window(tmp_path)
+    qtbot.addWidget(window)
+    window.timer.stop()
+    window.update_buttons()
+    assert not window.start_button.isEnabled()
+    assert window.start_button.toolTip() == VIEWER_REFUSAL
+    errors = []
+    window.show_error = errors.append
+    window.start_recording()          # however it is reached, nothing starts
+    assert window.service is None and errors == [VIEWER_REFUSAL]
+    close_window(window)
+
+
+def test_the_setup_card_keeps_every_field_it_does_not_edit(qtbot, tmp_path):
+    """The Bluetooth card rebuilt config.json from its own fields plus a list
+    of the broker card's, so a field added since -- the role, the Explorer
+    serial -- was reset to its default on the next save."""
+    from openpowerstation.config import Config, save_config
+    path = tmp_path / "config.json"
+    save_config(Config("AA:BB:CC:DD:EE:FF", "MR51ABCDEFGH1234", "1234567", role="viewer",
+                       jackery_serial="856199990000000"), path)
+    window = Window(tmp_path)
+    qtbot.addWidget(window)
+    window.timer.stop()
+    form = window.pages["settings"].form
+    assert not form.collect.isChecked()
+    form.conditions.setText("garage")
+    window.pages["settings"].save()
+    saved = load_config(path)
+    assert (saved.conditions, saved.role, saved.jackery_serial) == (
+        "garage", "viewer", "856199990000000")
+    form.collect.setChecked(True)
+    window.pages["settings"].save()
+    assert load_config(path).role == "collector"
+    window.update_buttons()
+    assert window.start_button.isEnabled()
     close_window(window)

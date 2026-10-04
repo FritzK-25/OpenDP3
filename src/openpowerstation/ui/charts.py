@@ -6,6 +6,8 @@ import pyqtgraph as pg
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QComboBox, QScrollArea, QSlider
 
+from ..queries import gap
+
 
 CHART_HELP = "Scroll to move down the charts · Ctrl + wheel: zoom time · Drag: pan time · Hover: inspect samples"
 
@@ -109,12 +111,13 @@ class PlaybackSlider(QSlider):
 def value_range(group, bounds, mode="context"):
     """Round outward, keep useful context, and never clip reported outliers.
 
-    Context uses full percentages, zero-based power, and a ten-degree temperature
-    span. Fit data allows finer variation, with small minimum spans for flat
-    readings. These are display choices, not device safety limits.
+    Context uses full percentages, zero-based power and estimated times, and a
+    ten-degree temperature span. Fit data allows finer variation, with small
+    minimum spans for flat readings. These are display choices, not device
+    safety limits.
     """
-    defaults = {"temperature": (0, 40), "power": (0, 100),
-                "soc": (0, 100), "state": (0, 5)}
+    defaults = {"temperature": (0, 40), "power": (0, 100), "soc": (0, 100),
+                "voltage": (0, 250), "frequency": (45, 65), "duration": (0, 10), "state": (0, 5)}
     if bounds is None:
         return defaults[group]
     low, high = bounds
@@ -122,14 +125,16 @@ def value_range(group, bounds, mode="context"):
         low, high = min(0, low), max(100, high)
         if (low, high) == (0, 100):
             return low, high
-    elif mode == "context" and group in ("power", "state"):
+    elif mode == "context" and group in ("power", "duration", "state"):
         low, high = min(0, low), max(0, high)
-    minimum = ({"temperature": 10, "power": 100, "soc": 100, "state": 5} if mode == "context"
-               else {"temperature": 2, "power": 20, "soc": .2, "state": 1})[group]
+    minimum = ({"temperature": 10, "power": 100, "soc": 100, "voltage": 20, "frequency": 2,
+                "duration": 5, "state": 5} if mode == "context"
+               else {"temperature": 2, "power": 20, "soc": .2, "voltage": 2, "frequency": .2,
+                     "duration": .5, "state": 1})[group]
     span = max(minimum, high - low)
     middle = (low + high) / 2
     lower, upper = middle - span * .58, middle + span * .58
-    if mode == "context" and group in ("power", "state"):
+    if mode == "context" and group in ("power", "duration", "state"):
         if low == 0:
             lower = 0
             upper = max(minimum, high * 1.08)
@@ -146,11 +151,13 @@ def sample_value(value):
     return str(int(value)) if float(value).is_integer() else f"{value:.9g}"
 
 
-def nearest_sample(points, seconds, edge_tolerance=0):
+def nearest_sample(points, seconds, edge_tolerance=0, thinning=None):
     """Return an actual adjacent sample, never interpolate across an evidence gap.
 
     Receipt time is included in the inspector, since independent fields need
     not arrive together. Outside a field's coverage we do not carry values on.
+    What counts as a gap is the charts' own rule (queries.gap), so the
+    inspector reaches exactly as far as a drawn line does.
     """
     if not points:
         return None
@@ -163,7 +170,7 @@ def nearest_sample(points, seconds, edge_tolerance=0):
             return None
     else:
         before, after = points[index - 1:index + 1]
-        if (after["t"] - before["t"] > 30 or before["segment"] != after["segment"]
+        if (gap(before, after, thinning)
                 or before["quality"] == "repeated_unverified" or after["quality"] == "repeated_unverified"):
             return None
         candidate = min((before, after), key=lambda p: abs(p["t"] - seconds))

@@ -26,6 +26,24 @@ def test_only_decoded_measurements_renew_the_session_lease(evidence,packet):
     assert rec.ingest(raw) is False
     assert rec.ingest(b"not a protocol frame") is False
 
+def test_one_corrupt_transport_per_run_of_undecodable_frames(evidence,packet):
+    """Every undecodable frame is kept; the run, not each frame, is the event.
+
+    A stale session key turns the whole stream undecodable, and an event per
+    frame put about 210 reasons into one pinned incident before the session
+    ended. A decodable frame or a new segment starts the next run.
+    """
+    store,rec=evidence
+    junk=b"\xaa\x03"+b"\0"*30
+    for t,raw in enumerate([junk,junk,junk,packet(seq=1,bms_max_cell_temp=23),junk,junk]):
+        add(rec,raw,t)
+    rec.event("connected","Authenticated local Bluetooth session.",rec.start_utc+6*10**9,6*10**9)
+    add(rec,junk,7)
+    kinds=[r[0] for r in store.conn.execute("SELECT kind FROM events ORDER BY id")]
+    assert kinds==["corrupt_transport","corrupt_transport","connected","corrupt_transport"]
+    statuses=[r[0] for r in store.conn.execute("SELECT status FROM frames ORDER BY id")]
+    assert statuses.count("invalid_packet")==6
+
 def test_unknown_message_and_field_retained(evidence,packet):
     store,rec=evidence
     from google.protobuf.internal.encoder import _VarintBytes
@@ -169,3 +187,66 @@ def test_extra_battery_slots_require_present_connection_flag(packet,flag):
     if flag:
         assert decoded.measurements['extra1_temperature']==0
         assert decoded.quality['extra1_temperature']=='unverified'
+
+def suspect(store):
+    return [r[0] for r in store.conn.execute("SELECT detail FROM events WHERE kind='suspect_telemetry' ORDER BY id")]
+
+def jackery_observe(rec,t,**measurements):
+    fields={"device":{"serial":"856199990000000"},"properties":{}}
+    rec.ingest_observation(json.dumps(fields).encode(),fields,measurements,
+                           utc_ns=rec.start_utc+int(t*1e9),mono_ns=rec.start_mono+int(t*1e9))
+
+@pytest.mark.parametrize("readings",[
+    # A BMS recalibration: 20 % of charge in one second.
+    [("cms_batt_soc",80.0),("cms_batt_soc",60.0)],
+    # A battery sensor failing to a rail: a jump that also leaves the band.
+    [("cms_batt_temp",25),("cms_batt_temp",75)],
+    # Out of band on first sight, with nothing to compare against.
+    [("cms_batt_temp",-35)],
+])
+def test_dp3_and_jackery_flag_the_same_physical_sequence(tmp_path,packet,readings):
+    """One rule set for both batteries: the same readings, the same evidence.
+
+    The DP3 used to run only the temperature jump, so a DP3 SoC step or a cell
+    temperature at a rail pinned nothing, and its frames aged out after seven
+    days while the identical Jackery reading was kept for ever.
+    """
+    from openpowerstation.recorder import Recorder
+    with Store(tmp_path/"dp3.sqlite",reserve_bytes=0) as dp3, \
+         Store(tmp_path/"jackery.sqlite",reserve_bytes=0) as jackery:
+        rec=Recorder(dp3,utc_ns=10**18,mono_ns=0)
+        explorer=Recorder(jackery,utc_ns=10**18,mono_ns=0,retain_days=None)
+        for t,(key,value) in enumerate(readings):
+            add(rec,packet(seq=t+1,**{key:value}),t)
+            jackery_observe(explorer,t,**{key:value})
+        assert suspect(dp3) and suspect(dp3)==suspect(jackery)
+        assert dp3.conn.execute("SELECT reasons FROM incidents").fetchall()
+
+def test_a_dp3_temperature_stuck_out_of_band_flags_once_per_value(evidence,packet):
+    # A DP3 frame arrives about every second; a sensor stuck at a rail must
+    # not write an event for each one, but a reading that keeps moving outside
+    # the band is the overheating itself and keeps being kept.
+    store,rec=evidence
+    for t in range(5):
+        add(rec,packet(seq=t+1,bms_min_cell_temp=-40),t)
+    assert suspect(store)==["bms_min_cell_temp -40 °C is outside -20..60 °C."]
+    add(rec,packet(seq=6,bms_min_cell_temp=-41),5)
+    assert len(suspect(store))==2
+
+def test_dp3_soc_drift_and_mos_heat_stay_ordinary(evidence,packet):
+    store,rec=evidence
+    add(rec,packet(seq=1,cms_batt_soc=80.0,bms_max_mos_temp=58),0)
+    # Charge moving at a real rate, and a MOSFET warmer than the cell band:
+    # a switch runs hotter than a cell, so only the jump rule watches it.
+    add(rec,packet(seq=2,cms_batt_soc=79.6,bms_max_mos_temp=66),9)
+    assert suspect(store)==[]
+    assert store.conn.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]==0
+
+def test_every_dp3_temperature_and_soc_field_has_a_shared_rule():
+    # A newly mapped temperature or charge field must not slip past every rule.
+    from openpowerstation.decoder import FIELDS
+    from openpowerstation.health import DP3_ROLES
+    covered=set(DP3_ROLES.battery_temperatures+DP3_ROLES.temperatures+DP3_ROLES.socs)
+    observed={f.key for f in FIELDS if f.group in ("temperature","soc")
+              and not f.key.startswith("extra") and not f.key.endswith("_soh")}
+    assert covered==observed

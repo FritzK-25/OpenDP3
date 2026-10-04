@@ -47,9 +47,54 @@ def test_a_temperature_outside_the_band_pins():
     assert "suspect_telemetry" in pinned(check(bt=-400))    # -40.0 °C
 
 
+def test_a_temperature_stuck_outside_the_band_pins_once_per_value():
+    # The rule the DP3 shares, where a frame arrives every second: a sensor
+    # stuck at a rail repeats one number, and one event says so. A reading
+    # still moving outside the band keeps pinning.
+    stuck = {"cms_batt_temp": (7.0, 85.0)}
+    assert check(t=10.0, previous=stuck, bt=850) == []
+    assert "suspect_telemetry" in pinned(check(t=10.0, previous=stuck, bt=860))
+
+
 def test_a_temperature_jump_pins():
     found = check(t=10.0, previous={"cms_batt_temp": (7.0, 29.0)}, bt=450)  # 45 °C in 3s
     assert "suspect_telemetry" in pinned(found)
+
+
+def test_config_json_sets_the_jackery_temperature_jump_as_well(tmp_path):
+    """config.json's anomaly settings used to reach only the DP3 recorder."""
+    import asyncio
+    from types import SimpleNamespace
+    from openpowerstation.cli import _jackery_ble_loop
+    from openpowerstation.config import Config, save_config
+    from openpowerstation.storage import Store
+    save_config(Config("AA:BB:CC:DD:EE:FF", "MR51123456789012", "123456", temperature_jump=3.0),
+                tmp_path / "config.json")
+    stop = tmp_path / "jackery.stop"
+    replies = [properties(bt=250), properties(bt=290)]   # 25.0 -> 29.0 °C
+
+    class Reader:
+        identity = SimpleNamespace(serial="856199990000000")
+
+        async def read(self, **_):
+            if len(replies) == 1:
+                stop.touch()
+            return replies.pop(0)
+
+        async def close(self):
+            return []
+
+    async def discover(*_, **__):
+        return Reader()
+
+    with Store(tmp_path / "jackery.sqlite", reserve_bytes=0) as store:
+        # Polls far enough apart that the two receipt times differ even at
+        # Windows' 15.6 ms monotonic clock resolution; equal times compare as
+        # no interval at all.
+        asyncio.run(_jackery_ble_loop(store, 0.1, None, "856199990000000", stop, discover=discover))
+        details = [row[0] for row in store.conn.execute(
+            "SELECT detail FROM events WHERE kind='suspect_telemetry'")]
+    assert len(details) == 1 and details[0].startswith("cms_batt_temp: 25 -> 29 °C in ")
 
 
 def test_a_soc_discontinuity_pins():
@@ -128,6 +173,6 @@ def test_the_poll_rate_may_now_be_seconds_not_minutes():
     from openpowerstation.cli import do_jackery_compact, do_jackery_record
     for bad in (0, 0.5, -1, 3601):
         with pytest.raises(ValueError, match="between 1 and 3600"):
-            do_jackery_record(None, None, interval=bad)
+            do_jackery_record(None, None, interval=bad, serial="856199990000000")
     with pytest.raises(ValueError, match="at least one hour"):
         do_jackery_compact(None, None, grace_hours=0)

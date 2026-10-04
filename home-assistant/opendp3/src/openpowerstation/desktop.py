@@ -49,8 +49,8 @@ def smoke_test(destination: Path) -> int:
         # Load the native crypto extension as well as the Python wrapper.
         AES.new(bytes(16), AES.MODE_CBC, bytes(16)).encrypt(bytes(16))
         # Exercise the ephemeral secp160r1 ECDH that ble.authenticate() performs.
-        # Nothing in OpenPowerstation signs with ecdsa; its signing timing leak
-        # (GHSA-wj6h-64fc-37mp) needs many signatures from one long-term key.
+        # Nothing in OpenPowerstation signs with ecdsa, so a signing check proved nothing
+        # the DP3 login needs.
         ours, theirs = (ecdsa.SigningKey.generate(curve=ecdsa.SECP160r1) for _ in range(2))
         assert (ecdsa.ECDH(ecdsa.SECP160r1, ours, theirs.get_verifying_key()).generate_sharedsecret_bytes()
                 == ecdsa.ECDH(ecdsa.SECP160r1, theirs, ours.get_verifying_key()).generate_sharedsecret_bytes())

@@ -4,12 +4,13 @@ from datetime import datetime, timezone
 import hashlib
 import html
 import json
+import math
 from pathlib import Path
 import zipfile
 
-from .fields import fields_for_session, is_jackery
+from .fields import chart_groups, device, fields_for_session, is_jackery
 from .events import SAFE_EVENT_KINDS, contains_gaps
-from .queries import plot_arrays
+from .queries import plot_arrays, thinning
 from .storage import read_db
 
 QUALIFICATION = (
@@ -18,9 +19,24 @@ QUALIFICATION = (
     "A disconnect is not a confirmed reboot; a raw error code is not an Error 036 mapping. "
     "This recording alone cannot establish faulty firmware."
 )
+# One chart per group the session's fields use (fields.chart_groups).
+AXIS_LABELS = {"temperature": "Temperature (°C)", "power": "Power (W)", "soc": "SOC / SOH (%)",
+               "voltage": "Voltage (V)", "frequency": "Frequency (Hz)",
+               "duration": "Estimated time (h)", "state": "Raw state / error"}
 
 def utc_text(ns):
     return datetime.fromtimestamp(ns/1e9, timezone.utc).isoformat(timespec="milliseconds")
+
+def cadence_text(thinned, start):
+    """How the exported frames were sampled, from what the downsampler recorded."""
+    if not thinned or thinned["before_t"] <= start:
+        return "Recorded at native receipt cadence."
+    extremes = (f" and the frames holding its extremes of {', '.join(thinned['peak_keys'])}"
+                if thinned["peak_keys"] else "")
+    return (f"Before {thinned['before_t']:.0f} elapsed seconds, ordinary history was thinned to the first "
+            f"frame of each {thinned['bucket_seconds']:g}-second bucket{extremes}; incident windows "
+            "protected at the time were kept whole, and the charts join kept frames up to a bucket "
+            "apart. After that point frames are at native receipt cadence.")
 
 def export_evidence(database: Path, destination: Path, *, sid=None, incident_id=None, include_raw=False):
     database, destination = Path(database), Path(destination)
@@ -92,8 +108,16 @@ def export_evidence(database: Path, destination: Path, *, sid=None, incident_id=
         synthetic = bool(session["synthetic"])
         complete = incident is None or (not incident["pre_missing"] and bounds[1]>=end)
         gaps = contains_gaps(events, start, end)
-        metadata = {"synthetic":synthetic,"decoder":session["decoder"],"elapsed_start_s":start,
+        # Thinned history is a recorded fact (queries.thinning), and both the
+        # charts and the report's account of the sampling follow it.
+        pins = [dict(r) for r in db.execute("SELECT start_t,end_t FROM incidents WHERE session_id=?", (sid,))]
+        thinned = thinning(db, sid, pins)
+        overlaps = bool(thinned) and thinned["before_t"] > start
+        metadata = {"synthetic":synthetic,"device":device(session),"decoder":session["decoder"],
+                    "scope":"session" if incident is None else "incident","elapsed_start_s":start,
                     "elapsed_end_s":end,"incident_window_complete":complete,"contains_gaps":gaps,
+                    "thinned_before_elapsed_s":thinned["before_t"] if overlaps else None,
+                    "thinned_bucket_s":thinned["bucket_seconds"] if overlaps else None,
                     "frame_status_counts":counts,"qualification":QUALIFICATION,
                     "omitted":"Account/device identifiers, free-text notes, firmware text, raw payloads and unknown fields."}
         (destination/"summary.json").write_text(json.dumps(metadata,indent=2),encoding="utf-8")
@@ -110,19 +134,25 @@ def export_evidence(database: Path, destination: Path, *, sid=None, incident_id=
             f"Evidence charts need the '{exc.name}' package, which is not "
             "installed. Install the chart extra: pip install 'openpowerstation[charts]'"
         ) from None
-    groups = [("temperature","Temperature (°C)"),("power","Power (W)"),("soc","SOC / SOH (%)"),("state","Raw state / error")]
-    if is_jackery(session):
-        groups += [("voltage", "Voltage (V)"), ("frequency", "Frequency (Hz)"), ("duration", "Estimated time (h)")]
+    groups = chart_groups(session)
     figure = Figure(figsize=(12, 2.25 * len(groups)), layout="constrained", facecolor="#f7f9fc")
     FigureCanvasAgg(figure)
     axes = figure.subplots(len(groups),1,sharex=True)
-    for axis,(group,label) in zip(axes,groups):
+    for axis,group in zip(axes,groups):
         for key,rows in points.items():
             if field_map[key].group != group:
                 continue
-            x,y = plot_arrays(rows)
-            axis.plot(x,y,lw=1,label=field_map[key].label)
-        axis.set_ylabel(label)
+            x,y = plot_arrays(rows, thinned)
+            line, = axis.plot(x,y,lw=1,label=field_map[key].label)
+            # A sample with no finite neighbour draws no line; mark it, or an
+            # observed value would leave an axis looking empty.
+            drawn = [math.isfinite(value) for value in y]
+            alone = [i for i,finite in enumerate(drawn) if finite
+                     and not (i > 0 and drawn[i-1]) and not (i+1 < len(drawn) and drawn[i+1])]
+            if alone:
+                axis.plot([x[i] for i in alone],[y[i] for i in alone],linestyle="none",marker="o",
+                          markersize=2,color=line.get_color())
+        axis.set_ylabel(AXIS_LABELS[group])
         axis.grid(alpha=.2)
         if axis.lines:
             axis.legend(fontsize=6,loc="upper left",ncols=2)
@@ -149,7 +179,7 @@ img{{width:100%}}td{{padding:6px 20px;border-bottom:1px solid #ddd}}small{{color
 <p class="notice">{'SYNTHETIC DATA — not a recording from your battery. ' if synthetic else ''}{html.escape(QUALIFICATION)}</p>
 <p>Requested window: {start:.3f}–{end:.3f} elapsed seconds.
 Pre/post coverage complete: {complete}. Communication or capture gaps: {gaps}.</p>
-<p>Decoder: {html.escape(session['decoder'])}. Recorded at native receipt cadence.</p>
+<p>Decoder: {html.escape(session['decoder'])}. {html.escape(cadence_text(thinned, start))}</p>
 <img src="charts.png" alt="Aligned telemetry charts with gaps and incident markers">
 <h2>Coverage</h2><table>{rows_html}</table>
 <p>{mapping_note}</p>

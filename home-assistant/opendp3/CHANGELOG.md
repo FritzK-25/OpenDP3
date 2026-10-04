@@ -1,3 +1,21 @@
+# Unreleased
+
+- Collector-pin byte accounting holds while a disconnect or capture incident
+  keeps extending, so the 30-day / 1-GB pin limits apply without waiting for
+  the incident to settle.
+- One control-request queue for both devices, with a fixed-width sequence so
+  file order is issue order, an age limit, and coalescing of repeated presses.
+- The DP3 user ID is DPAPI-protected on Windows like the broker password, the
+  desktop app has an explicit collector or viewer role, and the Jackery serial
+  is required wherever a recorder or publisher starts.
+- The EcoFlow and Jackery MQTT publishers share one recording reader, one
+  single-instance lock, discovery, and an `unreadable` collector state when the
+  recording cannot be read; app shutdown cleans up BlueZ per device, bounded.
+- An optional `entity_ids.json` beside `import.json` names entity IDs an
+  installation already holds, so re-created entities land back on them.
+- The image installs exactly its hashed lock, wheels only, and fails the build
+  on `pip check`.
+
 # 0.2.0
 
 First public release. Versioned together with the OpenDP3 core. Control stays

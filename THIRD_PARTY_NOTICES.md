@@ -51,6 +51,13 @@ build provenance attestation. They are not code-signed.
 The vendored protocol research includes the upstream session derivation table;
 this is protocol material, not a user's password or captured session key.
 
+The Home Assistant OS app image built from `home-assistant/opendp3` carries this file and
+`THIRD_PARTY_LICENSES` in `/opt/opendp3`, beside the vendored modules that refer
+to them. It installs its Python dependencies unmodified from their published
+wheels, exactly as `home-assistant/opendp3/requirements-headless.txt` pins and hashes
+them, and each keeps its own license files in its installed distribution
+metadata. The image contains no Qt or PySide6.
+
 Jackery BLE framing, key derivation, multi-packet response handling, and command
 identifiers were independently checked against the community Private Jack Home
 Assistant integration at https://github.com/porcupin26/private_jack (accessed
