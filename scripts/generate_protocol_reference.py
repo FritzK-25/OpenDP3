@@ -13,6 +13,8 @@ sys.path.insert(0, str(ROOT / "src"))
 from google.protobuf.descriptor import FieldDescriptor
 from openpowerstation import DECODER_VERSION, UPSTREAM_REVISION
 from openpowerstation.decoder import FIELDS, FIELD_MAP, UNAVAILABLE
+from openpowerstation.health import DP3_ROLES
+from openpowerstation.recorder import OUTPUT_KEYS, STATE_KEYS
 from openpowerstation.vendor.pb import mr521_pb2
 
 
@@ -102,12 +104,20 @@ def render():
         descriptor = display.fields_by_name.get(field.key)
         source = str(descriptor.number) if descriptor else "Conditional reserved-data mapping"
         quality = "observed" if descriptor else "community_mapping" if field.key.endswith("_soc") else "unverified"
-        if descriptor and field.group == "temperature":
-            event = "suspect_telemetry rule"
+        # Read from the tables the recorder itself runs, so this column cannot
+        # drift from what it does.
+        if field.key in DP3_ROLES.battery_temperatures:
+            event = "suspect_telemetry rule (band and jump)"
+        elif field.key in DP3_ROLES.temperatures:
+            event = "suspect_telemetry rule (jump)"
+        elif field.key in DP3_ROLES.socs:
+            event = "suspect_telemetry rule (step)"
         elif field.key == "errcode" or field.key.endswith("_err_code"):
             event = "device_error rule"
-        elif field.key in {"cms_bms_run_state", "cms_chg_dsg_state", "plug_in_info_ac_charger_flag"}:
+        elif field.key in STATE_KEYS:
             event = "state_change rule"
+        elif field.key in OUTPUT_KEYS:
+            event = "state_change rule (low two bits)"
         else:
             event = "None"
         lines.append(f"| `{field.key}` | {field.label} | {field.unit or 'Raw / no verified unit'} | "

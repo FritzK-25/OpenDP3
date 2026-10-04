@@ -35,7 +35,8 @@ def log_provenance():
 # collector and costs a rediscovery.
 #
 # Measured from the recorded sessions, gap between valid measurement frames
-# (the same selection newest_frame() makes):
+# (the same selection newest_frame() makes; the Jackery's now counts only frames
+# carrying core telemetry, as every reading in the 09-28 production log did):
 #
 #   DP3      4 healthy sessions, 77h   p99  1.1s   max  75.9s
 #            degraded session 09-19    p99  ---    max 251.1s  (recovered)
@@ -50,6 +51,24 @@ JACKERY_FRAME_LEASE = 420.0
 FRESHNESS_CHECK_SECONDS = 5.0
 RADIO_RECOVERY_SPACING = 15.0
 RECOVERY_GRACE_SECONDS = 10.0
+# How long the children have, all together, to stop by themselves once the
+# Supervisor stops the app; any still running are then killed. config.yaml's
+# timeout (60 s) is when the Supervisor kills the whole container, and its stop
+# can arrive while a lease recovery is still waiting RECOVERY_GRACE_SECONDS
+# for the collector it restarts, so the two together stay well inside it. A
+# collector needs a few seconds: its lease wait and BLE work are cancelled,
+# and closing the link is bounded at 5 s per call (radio.py).
+SHUTDOWN_GRACE_SECONDS = 40.0
+
+
+class SetupError(ValueError):
+    """A setup problem described by one fixed message that quotes no value.
+
+    main() prints these in full so the log names the cause of a failed start,
+    which is the first thing to read when the app will not start. Any
+    other error is reported by its type alone: configuration holds the broker
+    password, and an arbitrary message could quote it.
+    """
 
 
 @dataclass(frozen=True)
@@ -57,6 +76,9 @@ class FreshnessPolicy:
     database: Path
     max_age: float
     adapter: str
+    # The measurement keys that make a frame valid for this lease; empty means
+    # any measurement at all.
+    keys: tuple[str, ...] = ()
 
 
 @dataclass
@@ -82,22 +104,27 @@ def enabled(options, collector) -> bool:
 def adapter_name(value) -> str:
     adapter = str(value or "hci0").strip()
     if not re.fullmatch(r"hci[0-9]+", adapter):
-        raise ValueError("Bluetooth adapter must be hci followed by digits.")
+        raise SetupError("Bluetooth adapter must be hci followed by digits.")
     return adapter
 
 
-def newest_frame(database: Path) -> tuple[int, int] | None:
+def newest_frame(database: Path, keys: tuple[str, ...] = ()) -> tuple[int, int] | None:
+    """The newest decoded frame carrying a measurement, or one of ``keys`` if given."""
     if not database.exists():
         return None
     connection = None
     try:
         uri = f"file:{database.as_posix()}?mode=ro"
         connection = sqlite3.connect(uri, uri=True, timeout=0.2)
+        measured = "SELECT 1 FROM measurements m WHERE m.frame_id=f.id"
+        if keys:
+            measured += " AND m.key IN (" + ",".join("?" for _ in keys) + ")"
         row = connection.execute(
             "SELECT f.id,f.mono_ns FROM frames f "
             "WHERE f.status NOT IN ('pending','invalid_packet','repeated_unverified') "
-            "AND EXISTS (SELECT 1 FROM measurements m WHERE m.frame_id=f.id) "
-            "ORDER BY f.id DESC LIMIT 1"
+            f"AND EXISTS ({measured}) "
+            "ORDER BY f.id DESC LIMIT 1",
+            tuple(keys),
         ).fetchone()
         return (int(row[0]), int(row[1])) if row else None
     except (OSError, sqlite3.Error, TypeError, ValueError):
@@ -119,34 +146,55 @@ def job_environments(options) -> dict[str, dict[str, str]]:
 
 
 def freshness_policies(options, data: Path) -> dict[str, FreshnessPolicy]:
+    """One valid-frame lease for each collector job commands() starts.
+
+    Derived from those jobs rather than from the options a second time: the
+    two used to default jackery_enabled differently. supervise() refuses a
+    collector with no lease, which nothing would ever restart.
+    """
     policies = {}
     environments = job_environments(options)
-    if enabled(options, "ecoflow"):
+    collectors = commands(options, data)
+    if "ecoflow-collector" in collectors:
         policies["ecoflow-collector"] = FreshnessPolicy(
             data / "recordings.sqlite",
             ECOFLOW_FRAME_LEASE,
             environments["ecoflow-collector"]["OPENDP3_BLE_ADAPTER"],
         )
-    if enabled(options, "jackery"):
+    if "jackery-collector" in collectors:
+        from openpowerstation.jackery_fields import JACKERY_CORE_KEYS
+
         policies["jackery-collector"] = FreshnessPolicy(
             data / "jackery.sqlite",
             JACKERY_FRAME_LEASE,
             environments["jackery-collector"]["OPENDP3_BLE_ADAPTER"],
+            # The collector also records replies without these -- settings
+            # pages, fields it cannot map -- and a station sending only those
+            # is the outage this lease exists for, not a renewal of it.
+            JACKERY_CORE_KEYS,
         )
     return policies
 
 
 def prepare(data: Path, configuration: Path, options):
-    from openpowerstation.config import load_config
+    from openpowerstation.config import ConfigError, load_config
 
     # Use a dedicated app config mount, never the full HA configuration tree.
-    cfg = load_config(configuration / "import.json")
+    try:
+        cfg = load_config(configuration / "import.json")
+    except ConfigError as exc:
+        # openpowerstation.config words every ConfigError as one constant string.
+        raise SetupError(str(exc)) from None
     if not cfg.mqtt_host:
-        raise ValueError("A local MQTT broker must be configured.")
+        raise SetupError("A local MQTT broker must be configured.")
     # Control is opt-in: it stays off unless the app option turns it on.
-    # Old queued commands are never imported, and bridges reject retained MQTT
+    # Old queued commands are discarded below, and bridges reject retained MQTT
     # messages before they reach the BLE workers.
     cfg.allow_control = bool(options.get("allow_control", False))
+    # The app is the collector by definition, whatever the imported file says:
+    # import.json may be copied from a desktop config that was made a viewer
+    # when this Pi took the batteries over. Its options pick the devices.
+    cfg.role = "collector"
     data.mkdir(parents=True, exist_ok=True)
     temp = data / "config.tmp"
     fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
@@ -158,6 +206,27 @@ def prepare(data: Path, configuration: Path, options):
     # These are app-owned transient shutdown signals, not user databases.
     for name in ("collector.stop", "jackery.stop", "jackery-bridge.stop"):
         (data / name).unlink(missing_ok=True)
+    # Nor does a queued control request (openpowerstation.control_queue) outlive a start.
+    # Each is dated by the wall clock, which a Pi with no clock battery can
+    # restore at boot to about where it stopped, so a request queued just before
+    # a restart could read as seconds old hours later. A file that cannot be
+    # removed only waits to be refused on age; it does not stop the app.
+    discarded = 0
+    for name in ("commands", "jackery-commands"):
+        try:
+            leftovers = [path for path in (data / name).iterdir() if path.is_file()]
+        except OSError:
+            # Absent until a bridge first queues a request.
+            continue
+        for leftover in leftovers:
+            try:
+                leftover.unlink()
+                discarded += 1
+            except OSError:
+                pass
+    if discarded:
+        print(f"Discarded {discarded} control request file(s) queued before this start; "
+              "none was sent.", flush=True)
 
 
 def commands(options, data: Path):
@@ -177,7 +246,7 @@ def commands(options, data: Path):
     if enabled(options, "jackery"):
         serial = options.get("jackery_serial", "")
         if not isinstance(serial, str) or not re.fullmatch(r"[0-9]{15}", serial):
-            raise ValueError("Set the 15-digit Jackery serial in app options.")
+            raise SetupError("Set the 15-digit Jackery serial in app options.")
         jobs["jackery-mqtt"] = prefix + ["jackery-bridge", "--serial", serial]
         # linux_worker.py already wraps discover_reader with the serial-verified
         # BlueZ orphan release, and reads OPENDP3_BLE_ADAPTER for which adapter
@@ -190,7 +259,7 @@ def commands(options, data: Path):
         if name in collectors:
             jobs[name] = collectors[name]
     if not jobs:
-        raise ValueError("Enable at least one collector.")
+        raise SetupError("Enable at least one collector.")
     return jobs
 
 
@@ -205,7 +274,28 @@ def _stop_child(process, *, grace: float) -> None:
         process.wait()
 
 
-def supervise(jobs, stop, *, stagger=5, retry=15, grace=45, data=None,
+def _stop_children(processes, *, grace: float) -> None:
+    """Ask every child to stop at once, then wait for all against one deadline.
+
+    Stopping them one at a time gave each its own grace, so the last child was
+    asked only after every one before it had exited or been killed: up to
+    five graces in all, against the Supervisor's single 60 s timeout, with the
+    collectors -- started last -- signalled last.
+    """
+    # Newest first: the radio workers were started after the MQTT bridges.
+    live = [process for process in reversed(processes) if process.poll() is None]
+    for process in live:
+        process.send_signal(signal.SIGINT)
+    deadline = time.monotonic() + grace
+    for process in live:
+        try:
+            process.wait(timeout=max(0.01, deadline - time.monotonic()))
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+
+
+def supervise(jobs, stop, *, stagger=5, retry=15, grace=SHUTDOWN_GRACE_SECONDS, data=None,
               policies=None, environments=None,
               freshness_check=FRESHNESS_CHECK_SECONDS,
               recovery_spacing=RADIO_RECOVERY_SPACING,
@@ -214,6 +304,11 @@ def supervise(jobs, stop, *, stagger=5, retry=15, grace=45, data=None,
     due = {}
     policies = policies or {}
     environments = environments or {}
+    # The lease is the only thing that restarts a collector alive but no longer
+    # recording, so none is started without one.
+    unleased = [name for name in jobs if name.endswith("-collector") and name not in policies]
+    if unleased:
+        raise ValueError(f"No valid-frame lease for {', '.join(unleased)}; refusing to start.")
     freshness = {}
     # Collectors already restarted once for recording nothing since they
     # started. A device that is simply switched off looks the same, so the
@@ -229,7 +324,7 @@ def supervise(jobs, stop, *, stagger=5, retry=15, grace=45, data=None,
             environment.update(environments[name])
         process = subprocess.Popen(jobs[name], env=environment)
         if name in policies:
-            baseline = newest_frame(policies[name].database)
+            baseline = newest_frame(policies[name].database, policies[name].keys)
             freshness[name] = FreshnessState(
                 baseline[0] if baseline else None,
                 baseline[1] if baseline else None,
@@ -267,7 +362,7 @@ def supervise(jobs, stop, *, stagger=5, retry=15, grace=45, data=None,
                 state = freshness.get(name)
                 if process is None or state is None or process.poll() is not None:
                     continue
-                stamp = newest_frame(policy.database)
+                stamp = newest_frame(policy.database, policy.keys)
                 if stamp is not None:
                     frame_id, frame_mono_ns = stamp
                     state.last_frame_mono_ns = frame_mono_ns
@@ -306,24 +401,45 @@ def supervise(jobs, stop, *, stagger=5, retry=15, grace=45, data=None,
     finally:
         # CLI handlers catch KeyboardInterrupt to close BLE, flush SQLite and
         # publish MQTT offline. Bound shutdown if a backend does not respond.
-        for process in processes.values():
-            _stop_child(process, grace=grace)
+        _stop_children(list(processes.values()), grace=grace)
 
 
-def main():
+def use_entity_id_overrides(configuration: Path):
+    """Seed the entity IDs an installation already holds; see entity_ids.py.
+
+    Read once here so a malformed file stops setup with a clear cause instead
+    of failing every bridge restart. Every child inherits the variable.
+    """
+    from openpowerstation.entity_ids import OVERRIDES_ENV, EntityIdOverrideError, load_overrides
+
+    path = configuration / "entity_ids.json"
+    if not path.is_file():
+        return
+    try:
+        load_overrides(path)
+    except EntityIdOverrideError as exc:
+        raise SetupError(str(exc)) from None
+    os.environ[OVERRIDES_ENV] = str(path)
+
+
+def main(data=Path("/data"), configuration=Path("/config")):
     os.umask(0o077)
     log_provenance()
     stop = threading.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, lambda *_: stop.set())
     try:
-        data = Path("/data")
         options = json.loads((data / "options.json").read_text("utf-8"))
         jobs = commands(options, data)
         environments = job_environments(options)
         policies = freshness_policies(options, data)
-        prepare(data, Path("/config"), options)
+        prepare(data, configuration, options)
         jobs["bluetooth-status"] = [sys.executable, "-u", "/opt/opendp3/bluetooth_status.py"]
+        use_entity_id_overrides(configuration)
+    except SetupError as exc:
+        # A fixed message that quotes no value; it names the cause.
+        print(f"OpenPowerstation setup invalid: {exc}", flush=True)
+        return 1
     except Exception as exc:
         # Configuration can contain credentials. Do not print the original error.
         print(f"OpenPowerstation setup invalid ({type(exc).__name__}); check private import.json and app options.", flush=True)

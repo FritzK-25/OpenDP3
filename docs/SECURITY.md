@@ -7,12 +7,15 @@ The [security review disposition](SECURITY_REVIEW.md) records the changes in thi
 
 ## What the application protects
 
-OpenPowerstation's outbound allowlist permits the implemented authentication exchange and,
+OpenPowerstation's outbound allowlists permit the implemented authentication exchange and,
 when control is enabled, a small set of explicitly allowlisted device commands.
-No firmware commands, clock synchronization, cloud telemetry fallback, power-off,
-factory-reset, Wi-Fi, or arbitrary battery-boundary writes are enabled. The Jackery
-Explorer uses the same local BLE session for status and its allowlisted controls;
-no Jackery account, token, or cloud connection is involved.
+No firmware commands, cloud telemetry fallback, factory-reset, Wi-Fi, or arbitrary
+battery-boundary writes are enabled on either device. The DP3 is sent no clock
+synchronization and no power-off. The Jackery Explorer is sent a clock sync on
+each new session, which it requires before it answers a status query, and with
+control enabled its allowlist includes an Auto Power-Off timer (both described
+below). It uses the same local BLE session for status and its allowlisted
+controls; no Jackery account, token, or cloud connection is involved.
 Raw authentication exchanges are excluded before telemetry persistence. Shareable
 exports use explicit field/event allowlists; opaque protocol bytes belong in a
 separate private archive. No recording or diagnostic upload is implemented. The
@@ -31,34 +34,98 @@ application behaves exactly as earlier read-only releases did.
 Every installation, including a fresh Home Assistant app, starts with control
 off and must opt in explicitly.
 
-With control on, the DP3 can switch its HV and LV AC outputs, carried in `ConfigWrite`
-to command set `0xFE`, command `0x11`. The Jackery can switch its AC and DC
-outputs, set the fixed Battery Saving Mode (`lps=1`, 15–85%), and set the display
-timeout through its allowlisted `slt` command (`0`, `2`, or `120` minutes) over its
-authenticated RC4 session. Screen-timeout status is verified separately through
-the returned `sltb` preset enum before the command is recorded as confirmed. The
-gate parses the payload that is about to be written, requires that the only
-fields present are those explicitly allowlisted, and then rebuilds the message from that allowlist
-and requires the bytes to match exactly. Anything else is refused before it
-reaches the radio — including a permitted field sent alongside a forbidden one,
-and unknown protobuf tags, which survive a parse-and-re-serialize check because
-protobuf preserves and re-emits fields it does not recognize. `cfg_power_off`,
-`reset_factory_setting`, `cfg_bms_power_off`, charge limits and the
-installment-payment fields travel on this same message and are never sent.
+With control on, the DP3 can switch its HV and LV AC outputs, `cfg_hv_ac_out_open`
+and `cfg_lv_ac_out_open`, carried in `ConfigWrite` to command set `0xFE`, command
+`0x11`. The DP3's gate parses the payload that is about to be written, requires
+that the only fields present are those explicitly allowlisted, and then rebuilds
+the message from that allowlist and requires the bytes to match exactly. Anything
+else is refused before it reaches the radio — including a permitted field sent
+alongside a forbidden one, and unknown protobuf tags, which survive a
+parse-and-re-serialize check because protobuf preserves and re-emits fields it
+does not recognize. `cfg_power_off`, `reset_factory_setting`, `cfg_bms_power_off`,
+charge limits and the installment-payment fields travel on this same message and
+are never sent.
+
+The Jackery is written to only over its authenticated RC4 session, through one
+write site that takes the plaintext command, checks it, and encrypts it itself.
+Its gate admits exactly three shapes and refuses anything else before it reaches
+the radio:
+
+- the status query, action `0xFC`, with no body;
+- the clock sync, action `0x0F`, whose body is the host's Unix time and UTC
+  offset in seconds, `{"ts":…,"uo":…}`, and nothing else. The station answers no
+  status query until it has had one, so a session sends one, under each
+  candidate session key, before every status query until the station first
+  answers, and none after that;
+- with control on, one allowlisted control command, byte for byte as the
+  allowlist builds it. Each send spends a single-use grant naming exactly that
+  command, so the write site passes no control body that arrives any other way.
+
+The Jackery's allowlisted controls, by the property each one writes:
+
+| Control | Property | Options |
+|---|---|---|
+| AC output | `oac` | on, off |
+| DC output | `odc` | on, off |
+| Battery Saving Mode | `lps` | `full` (0), `save` (1, the fixed 15–85% range) |
+| Screen timeout | `slt` | `always_on` (0 minutes), `2m` (2), `2h` (120) |
+| Charging mode | `cs` | `standard` (0), `quiet` (1) |
+| Auto Power-Off | `pm` | `off`, `2h`, `8h`, `12h`, `24h` (0 to 1440 minutes) |
+
+Auto Power-Off is a power-off setting: it sets the station's own automatic
+power-off timer to one of Jackery's documented presets, after which the station,
+not OpenPowerstation, may switch itself off. No command that powers it off directly is
+allowlisted. Screen-timeout status is verified through the returned `sltb`
+preset enum, because the station reports a preset rather than the minutes written.
 
 Commands can only be issued after authentication completes, and each one is
 recorded in the relevant session. DP3 commands are `control` or
-`control_refused`; Jackery commands become `control` only after status readback
-confirms them, otherwise they are recorded as `control_unverified`.
+`control_refused`, or `control_unverified` when the write itself fails and the
+command may have reached the device anyway. The DP3 acknowledges nothing, so a
+DP3 `control` records that the write left the radio, not that the output
+changed. What the output did is recorded separately: each change in the low two
+bits of `flow_info_ac_hv_out` or `flow_info_ac_lv_out`, the feedback the switches
+show, is a `state_change` event, whether a command or the device's own buttons
+caused it. Jackery commands become `control` only after status readback confirms
+them, `control_unverified` when the write or the readback fails or disagrees, and
+`control_refused` when they are refused before reaching the radio. Each readback
+is kept as a frame stamped when it was read, as is the reading taken before the
+command, so neither appears on the wrong side of it.
 
 The bridge does not send them. It writes a request file that the relevant
 collector reads, so the bridge still opens no Bluetooth connection and a broker
-that is unreachable, slow or hostile cannot directly reach the radio.
+that is unreachable, slow or hostile cannot directly reach the radio. Each
+request carries its own issue time and is refused unless it is between 0 and 30
+seconds old at the moment it would be written. A request that waited in the
+queue or behind another write is refused rather than sent late, and so is one
+dated later than the clock now reads, which is what a clock stepped back after
+it was issued looks like. The handoff is capped at 64 requests per device.
+Requests for the same control coalesce to the newest, and filenames carry a
+fixed-width sequence tie-breaker after the issue timestamp. That preserves true
+numeric issue order when a coarse clock or burst gives 10+ requests the same
+timestamp; the same order is used for pruning the oldest queued files. The local handoff is bounded to 64 requests per
+device. Requests for the same control coalesce to the newest, and a fixed-width
+sequence component preserves numeric issue order when many requests share one
+coarse wall-clock timestamp. The same ordering is used to choose the oldest
+files for pruning, so a burst cannot make request 9 appear newer than request
+10 merely because filenames are compared lexically.
+
+The DP3 AC outputs need a guarded payload. The LV output can power the host that
+runs Home Assistant, so the discovered switches' own `ON`/`OFF` never changes an
+output. A tap on the device page, a more-info dialog, Developer tools or an
+automation calling `switch.turn_off` reaches the bridge. The bridge hands it to
+the collector marked unguarded, and the collector records `control_refused`. Only
+`GUARDED_ON`/`GUARDED_OFF` on the same command topic is executed. That payload is
+published by an arm-then-change interlock such as this deployment's
+`script.ecoflow_ac_output_guarded_toggle`. The collector also refuses any
+request file that is not explicitly marked guarded.
 
 **What this trusts.** Anything able to publish to your broker can request those
 allowlisted changes; MQTT access is the whole authorization boundary, so the
-broker account matters as much as the setting. Home Assistant control state comes
-from fresh device feedback rather than the last command OpenPowerstation sent. A missing or
+broker account matters as much as the setting. The guarded payload stops
+accidental one-tap changes, not a deliberate publisher: it is a fixed string, not
+a credential. Home Assistant control state comes from fresh device feedback
+rather than the last command OpenPowerstation sent. A missing or
 stale readback makes the corresponding control unavailable instead of guessing
 that a write succeeded. This improves state honesty but does not authenticate the
 device telemetry itself; the Bluetooth identity limits below still apply.
@@ -125,20 +192,43 @@ does not save EcoFlow account passwords, login tokens or session keys in
 configuration, recordings or exports. The ID and device configuration are retained
 locally.
 
-The one credential OpenPowerstation does store is the optional Home Assistant broker
-password. It is DPAPI-protected (`CryptProtectData`, scoped to the current
-Windows user) before it is written to `config.json`, and DPAPI-unprotected on
-load; the plain field in the file is left empty. That ties the stored value to
-this Windows account's login: another account on the same machine, or someone
-who copies `config.json` elsewhere without also having that account's login,
-cannot recover it. It does not protect against malware running as this same
-account, a compromised OS, or a local administrator -- those can still reach
-the password through this application's own process. On Windows that file
+OpenPowerstation stores two credentials. The more valuable is the DP3's numeric **user
+ID**: the login proof is derived from it and the serial, and the serial is in
+the DP3's own advertisement, so anyone holding the user ID has everything a
+nearby radio needs to log in to the DP3 as its owner's app during any reconnect
+gap -- and to send commands OpenPowerstation's outbound gate would refuse, because that
+gate is OpenPowerstation's, not the device's. The other is the optional Home Assistant
+broker password.
+
+On Windows both are DPAPI-protected (`CryptProtectData`, scoped to the current
+Windows user) before they are written to `config.json`, and DPAPI-unprotected
+on load; their plain fields in the file are left empty. That ties the stored
+values to this Windows account's login: another account on the same machine, or
+someone who copies `config.json` elsewhere without also having that account's
+login, cannot recover them. It does not protect against malware running as this
+same account, a compromised OS, or a local administrator -- those can still
+reach them through this application's own process. On Windows that file
 carries only inherited folder permissions, so use a broker account created
 solely for this purpose regardless, so the stored value grants nothing else.
 A `config.json` written before this existed still loads its plain-text
-`mqtt_password` field normally, and the next save upgrades it to the
-DPAPI-protected form.
+`user_id` and `mqtt_password` fields normally, and the next save upgrades them
+to the DPAPI-protected form; an OpenPowerstation build from before then refuses the
+upgraded file. Without DPAPI (Linux, macOS) the user ID and the broker password
+stay in their plain fields, in a `config.json` only its owner can read (mode
+600 from the moment it is created, so neither is ever briefly readable by other
+accounts).
+
+**The HAOS app does not have this protection.** Its configuration arrives as
+`import.json` in the app's `addon_configs` folder -- which the Samba app shares
+and the nightly backup includes -- and the app copies it to `/data/config.json`.
+Both hold the user ID and the broker password in plain text, readable to
+anyone with the Samba credential or a copy of a backup. Moving them out needs a
+release of the app, not a code change alone: the broker credentials from the
+Supervisor's MQTT service (`services: mqtt:need`, then
+`http://supervisor/services/mqtt`), and the DP3 address, serial and user ID as
+app options with the `password` schema type, after which `import.json`, its
+`addon_config` map and `scripts/export_opendp3_pi_config.py` can go. Until
+then, treat the Samba account and the backups as holding the DP3's login.
 
 DPAPI exists only on Windows. On Linux and macOS the password stays in the
 plain `mqtt_password` field, and `config.json` is created readable and writable
@@ -159,7 +249,8 @@ Its setup warning is informational, not detection or enforcement of safe ACLs.
 
 Keep the executable and data in folders private to your Windows account. Avoid
 shared, public, network or broadly writable portable folders. Other users with
-access could read the account ID or replace configuration to redirect selection.
+access could replace configuration to redirect selection, and read the account ID
+from a `config.json` written before it was DPAPI-protected and not saved since.
 Review the folder's Windows Security permissions before setup; do not grant
 other accounts write access for convenience. Running as administrator is not
 required and does not solve this trust problem. Local administrators, malware
@@ -178,7 +269,11 @@ What the bridge publishes is the allowlisted numeric field set from the decoder,
 plus capture-health diagnostics. Raw frames, decoded protobuf documents, the
 account ID and the operating-conditions note are never published. The device
 serial is not published either: topics and entity identifiers use the same
-SHA-256-derived handle the collector already uses for its per-device lock.
+SHA-256-derived handle the collector already uses for its per-device lock. The
+handle is pseudonymous rather than anonymous: it is unsalted, so anyone who can
+guess the serial can confirm it. The Jackery collector's log lines name the unit
+by the same handle, never by its serial, and record state changes rather than
+every reading.
 
 Anything the broker can read, everyone with access to that broker can read.
 Published values are retained on the broker until overwritten. Readings older than

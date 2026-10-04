@@ -6,6 +6,8 @@ from unittest.mock import Mock
 
 import pytest
 
+from openpowerstation.config import Config, save_config
+
 spec = importlib.util.spec_from_file_location("opendp3_watchdog", Path(__file__).parents[1] / "scripts/watchdog.py")
 watchdog = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(watchdog)
@@ -39,11 +41,12 @@ def test_an_unconfigured_device_is_neither_checked_nor_started(tmp_path, monkeyp
     assert asked["jackery"] is False
 
 
-def test_configured_devices_follow_the_launcher(tmp_path, monkeypatch):
-    monkeypatch.delenv(watchdog.start_all.JACKERY_SERIAL_ENV, raising=False)
+def test_configured_devices_follow_the_launcher(tmp_path):
     assert watchdog.configured_devices(tmp_path) == {"DP3": False, "Jackery": False}
-    (tmp_path / "config.json").write_text("{}", encoding="utf-8")
-    monkeypatch.setenv(watchdog.start_all.JACKERY_SERIAL_ENV, "123456789012345")
+    save_config(Config("AA:BB:CC:DD:EE:FF", "MR51123456789012", "123456"), tmp_path / "config.json")
+    assert watchdog.configured_devices(tmp_path) == {"DP3": True, "Jackery": False}
+    save_config(Config("AA:BB:CC:DD:EE:FF", "MR51123456789012", "123456", jackery_serial="123456789012345"),
+                tmp_path / "config.json")
     assert watchdog.configured_devices(tmp_path) == {"DP3": True, "Jackery": True}
 
 
@@ -124,3 +127,15 @@ def test_recovery_exception_does_not_end_supervision(tmp_path, monkeypatch):
         watchdog.run(tmp_path)
     assert probe.call_count == 2
     recovery.assert_called_once_with(tmp_path, "DP3 bridge", True)
+
+
+def test_a_viewer_install_is_never_supervised(tmp_path, monkeypatch):
+    # A scheduled task left registered on a PC made a viewer must start
+    # nothing: supervising here is starting collectors.
+    from openpowerstation.config import Config, save_config
+    save_config(Config("AA:BB:CC:DD:EE:FF", "MR51123456789012", "123456", role="viewer"),
+                tmp_path / "config.json")
+    monkeypatch.setattr(watchdog, "run", Mock(side_effect=AssertionError("supervised a viewer")))
+    monkeypatch.setattr(watchdog.logging, "basicConfig", lambda **_: None)
+    monkeypatch.setattr(watchdog.sys, "argv", ["watchdog.py", "--data-dir", str(tmp_path)])
+    assert watchdog.main() == 0

@@ -38,13 +38,13 @@ Values are not promised on every firmware or packet. Raw error fields keep their
 
 | Field | Label | Unit | Display tag / source | Quality on a nonduplicate packet | Event eligibility |
 |---|---|---|---|---|---|
-| `bms_max_cell_temp` | BMS maximum cell temperature | °C | 259 | `observed` | suspect_telemetry rule |
-| `bms_min_cell_temp` | BMS minimum cell temperature | °C | 258 | `observed` | suspect_telemetry rule |
-| `bms_max_mos_temp` | BMS maximum MOS temperature | °C | 261 | `observed` | suspect_telemetry rule |
-| `bms_min_mos_temp` | BMS minimum MOS temperature | °C | 260 | `observed` | suspect_telemetry rule |
-| `cms_batt_temp` | CMS battery temperature | °C | 102 | `observed` | suspect_telemetry rule |
-| `bms_batt_soc` | Main battery SOC | % | 242 | `observed` | None |
-| `cms_batt_soc` | System SOC | % | 262 | `observed` | None |
+| `bms_max_cell_temp` | BMS maximum cell temperature | °C | 259 | `observed` | suspect_telemetry rule (band and jump) |
+| `bms_min_cell_temp` | BMS minimum cell temperature | °C | 258 | `observed` | suspect_telemetry rule (band and jump) |
+| `bms_max_mos_temp` | BMS maximum MOS temperature | °C | 261 | `observed` | suspect_telemetry rule (jump) |
+| `bms_min_mos_temp` | BMS minimum MOS temperature | °C | 260 | `observed` | suspect_telemetry rule (jump) |
+| `cms_batt_temp` | CMS battery temperature | °C | 102 | `observed` | suspect_telemetry rule (band and jump) |
+| `bms_batt_soc` | Main battery SOC | % | 242 | `observed` | suspect_telemetry rule (step) |
+| `cms_batt_soc` | System SOC | % | 262 | `observed` | suspect_telemetry rule (step) |
 | `cms_batt_soh` | System SOH | % | 263 | `observed` | None |
 | `bms_batt_soh` | Main battery SOH | % | 243 | `observed` | None |
 | `pow_in_sum_w` | Total input | W | 3 | `observed` | None |
@@ -55,8 +55,8 @@ Values are not promised on every firmware or packet. Raw error fields keep their
 | `pow_get_pv_h` | PV HV input | W | 35 | `observed` | None |
 | `pow_get_pv_l` | PV LV input | W | 36 | `observed` | None |
 | `pow_get_bms` | Battery power (raw sign) | W | 158 | `observed` | None |
-| `flow_info_ac_hv_out` | AC HV output state (raw bitmask) | Raw / no verified unit | 48 | `observed` | None |
-| `flow_info_ac_lv_out` | AC LV output state (raw bitmask) | Raw / no verified unit | 49 | `observed` | None |
+| `flow_info_ac_hv_out` | AC HV output state (raw bitmask) | Raw / no verified unit | 48 | `observed` | state_change rule (low two bits) |
+| `flow_info_ac_lv_out` | AC LV output state (raw bitmask) | Raw / no verified unit | 49 | `observed` | state_change rule (low two bits) |
 | `cms_bms_run_state` | BMS run state (raw) | Raw / no verified unit | 275 | `observed` | state_change rule |
 | `cms_chg_dsg_state` | Charge/discharge state (raw) | Raw / no verified unit | 282 | `observed` | state_change rule |
 | `plug_in_info_ac_charger_flag` | AC connected | Raw / no verified unit | 202 | `observed` | state_change rule |

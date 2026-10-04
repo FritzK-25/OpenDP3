@@ -16,6 +16,13 @@ class PolicyError(ProtocolError):
 class AuthenticationError(ProtocolError):
     pass
 
+class CredentialsRejected(AuthenticationError):
+    """The DP3 refused this account's login: re-bound, reset, or a wrong user ID.
+
+    Every other AuthenticationError is a handshake this code does not
+    understand, which needs a decoder change rather than new credentials.
+    """
+
 @dataclass(frozen=True)
 class Identity:
     address: str
@@ -51,6 +58,17 @@ CONTROL_CMD_ID = 0x11
 # one malformed request away from the radio. The gate re-parses what is about to
 # be written rather than trusting the caller that built it.
 CONTROL_FIELDS = {"cfg_hv_ac_out_open", "cfg_lv_ac_out_open"}
+# What each control's output really reports. The DP3 publishes these bitmasks in
+# DisplayPropertyUpload, and the pinned upstream implementation uses their low
+# two bits for the real outlet state: 0 is off; 2 and 3 are on. Value 1 is left
+# unknown rather than guessed. The bridge's switches show it (bridge.py
+# control_state_template), and the recorder makes each change of it a
+# state_change event, since the DP3 acknowledges no command.
+CONTROL_FEEDBACK_FIELDS = {
+    "cfg_hv_ac_out_open": "flow_info_ac_hv_out",
+    "cfg_lv_ac_out_open": "flow_info_ac_lv_out",
+}
+OUTPUT_STATES = {0: "off", 1: "unknown", 2: "on", 3: "on"}
 
 
 def control_packet(field: str, value: bool) -> Packet:
@@ -158,8 +176,36 @@ def parse_packet(raw: bytes) -> Packet:
         raise ProtocolError("Unsupported DP3 frame.")
     return p
 
+TYPE7_PREFIX = b"\x5a\x5a"
+
+
+def _type7_size(data: bytes, at: int) -> int | None:
+    """The span an EncPacket header at ``at`` claims, or None if it is no header."""
+    if len(data) - at < 8:
+        return None
+    n = int.from_bytes(data[at + 4:at + 6], "little")
+    return n + 6 if 2 <= n <= 10_000 else None
+
+
+def _type7_frame_at(data: bytes, at: int) -> bool:
+    """True when a whole EncPacket with a valid checksum starts at ``at``."""
+    size = _type7_size(data, at)
+    return (size is not None and at + size <= len(data) and
+            crc16(data[at:at + size - 2]) == int.from_bytes(data[at + size - 2:at + size], "little"))
+
+
 class WireBuffer:
-    """Bounded, ordered framing. Embedded prefixes never truncate valid fragments."""
+    """Bounded, ordered framing. Embedded prefixes never truncate valid fragments.
+
+    Type 7 resynchronises so that it never loses a frame the vendored
+    EncPacketAssembler.reassemble would deliver. A candidate whose checksum
+    fails is a false prefix or a frame cut short, so the scan moves on one byte
+    rather than past the span it claimed, which held the start of the next
+    frame. A candidate still waiting for its tail is given up only when a
+    complete frame with a valid checksum starts inside it: a header with a false
+    length then costs nothing behind it, and a real frame still arriving is
+    never abandoned for a prefix that happens to occur in its encrypted bytes.
+    """
     def __init__(self, encryption_type: int, encryption=None, simple=False):
         self.kind = encryption_type
         self.encryption = encryption
@@ -167,13 +213,24 @@ class WireBuffer:
         self.buffer = b""
         self.discarded = 0
 
+    def _type7_resync(self) -> bool:
+        """Drop the waiting candidate when a complete frame starts inside it."""
+        at = self.buffer.find(TYPE7_PREFIX, 1)
+        while at > 0:
+            if _type7_frame_at(self.buffer, at):
+                self.discarded += at
+                self.buffer = self.buffer[at:]
+                return True
+            at = self.buffer.find(TYPE7_PREFIX, at + 1)
+        return False
+
     async def feed(self, data: bytes) -> list[bytes]:
         self.buffer += data
         if len(self.buffer) > 65_536:
             self.buffer = b""
             raise ProtocolError("Receive buffer exceeded limit.")
         result = []
-        prefix = b"\x5a\x5a" if self.kind == 7 else b"\xaa"
+        prefix = TYPE7_PREFIX if self.kind == 7 else b"\xaa"
         while self.buffer:
             start = self.buffer.find(prefix)
             if start < 0:
@@ -187,32 +244,37 @@ class WireBuffer:
             if len(self.buffer) < (8 if self.kind == 7 else 5):
                 break
             if self.kind == 7:
-                n = int.from_bytes(self.buffer[4:6], "little")
-                if n < 2 or n > 10_000:
+                size = _type7_size(self.buffer, 0)
+                if size is None:
                     self.discarded += 1
                     self.buffer = self.buffer[1:]
                     continue
-                size = n + 6
-            else:
-                if crc8(self.buffer[:4]) != self.buffer[4] or self.buffer[1] not in (3, 0x13):
+                if len(self.buffer) < size:
+                    if self._type7_resync():
+                        continue
+                    break
+                frame = self.buffer[:size]
+                if crc16(frame[:-2]) != int.from_bytes(frame[-2:], "little"):
                     self.discarded += 1
                     self.buffer = self.buffer[1:]
                     continue
-                n = int.from_bytes(self.buffer[2:4], "little")
-                if n > 10_000:
-                    raise ProtocolError("Unsupported frame length.")
-                inner = n + 15
-                size = 5 + (((inner + 15) // 16) * 16 if self.kind == 1 else inner)
+                self.buffer = self.buffer[size:]
+                body = frame[6:-2]
+                result.append(body if self.simple else await self.encryption.decrypt(body))
+                continue
+            if crc8(self.buffer[:4]) != self.buffer[4] or self.buffer[1] not in (3, 0x13):
+                self.discarded += 1
+                self.buffer = self.buffer[1:]
+                continue
+            n = int.from_bytes(self.buffer[2:4], "little")
+            if n > 10_000:
+                raise ProtocolError("Unsupported frame length.")
+            inner = n + 15
+            size = 5 + (((inner + 15) // 16) * 16 if self.kind == 1 else inner)
             if len(self.buffer) < size:
                 break
             frame, self.buffer = self.buffer[:size], self.buffer[size:]
-            if self.kind == 7:
-                if crc16(frame[:-2]) != int.from_bytes(frame[-2:], "little"):
-                    self.discarded += len(frame)
-                    continue
-                body = frame[6:-2]
-                result.append(body if self.simple else await self.encryption.decrypt(body))
-            elif self.kind == 1:
+            if self.kind == 1:
                 result.append(frame[:5] + (await self.encryption.decrypt(frame[5:]))[:inner])
             else:
                 result.append(frame)

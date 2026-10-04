@@ -71,17 +71,17 @@ class FakeClient:
 
 # --------------------------------------------------------------------------- discovery
 
-def test_discovery_covers_every_decoder_field_with_stable_identifiers():
+def test_discovery_covers_every_decoder_field_with_distinct_identifiers():
+    # Distinct, not stable: every expectation here is derived from the code it
+    # checks. The identities themselves are pinned by test_mqtt_contract.py.
     payloads = discovery_payloads(device_id(SERIAL), firmware="1.2.3")
     prefix = "opendp3_" + device_id(SERIAL) + "_"
     assert all(payload["unique_id"].startswith(prefix) for payload in payloads.values())
     published = {topic.split("/")[-2] for topic in payloads}
     assert {field.key for field in FIELDS} <= published, "a decoder field has no entity"
     assert len({payload["unique_id"] for payload in payloads.values()}) == len(payloads)
-    assert len({payload["object_id"] for payload in payloads.values()}) == len(payloads)
+    assert len({payload["default_entity_id"] for payload in payloads.values()}) == len(payloads)
     for payload in payloads.values():
-        # Entity IDs are pinned so the Home Assistant package YAML can name them.
-        assert payload["object_id"].startswith("opendp3_")
         assert payload["device"]["sw_version"] == "1.2.3"
 
 
@@ -103,18 +103,18 @@ def test_entity_classification_matches_field_semantics():
 
 
 def test_measurements_and_diagnostics_use_separate_availability():
-    payloads = {payload["object_id"]: payload for payload in discovery_payloads("abc").values()}
+    payloads = {topic.split("/")[3]: payload for topic, payload in discovery_payloads("abc").items()}
 
     # Diagnostics follow the bridge alone, so they stay readable while telemetry
     # is down and the reason stays visible.
-    diagnostic = payloads["opendp3_collector_state"]
+    diagnostic = payloads["collector_state"]
     assert diagnostic["availability_topic"].endswith("/availability")
     assert "availability" not in diagnostic
 
     # Measurements require the bridge AND telemetry. Binding them to /telemetry
     # alone held stale readings when the bridge died: the last will only marks
     # /availability offline, and the retained /telemetry stays "online".
-    measurement = payloads["opendp3_bms_batt_soc"]
+    measurement = payloads["bms_batt_soc"]
     assert measurement["availability_mode"] == "all"
     assert [entry["topic"] for entry in measurement["availability"]] == [
         "opendp3/abc/availability", "opendp3/abc/telemetry", "opendp3/abc/state"]
@@ -153,6 +153,28 @@ def test_every_measurement_is_gated_on_the_bridge_being_alive():
         assert payload["availability_mode"] == "all", payload["object_id"]
 
 
+def test_conversion_loss_is_discovered_as_one_more_power_sensor():
+    """Added beside the decoder fields, never in place of one.
+
+    Every existing topic and unique_id keeps its identity; this is one more
+    entity on the same device.
+    """
+    loss = discovery_payloads("abc")["homeassistant/sensor/opendp3_abc/conversion_loss_w/config"]
+    assert loss["unique_id"] == "opendp3_abc_conversion_loss_w"
+    # Home Assistant seeds a newly created MQTT entity's ID from
+    # default_entity_id, and dashboards and templates read this one.
+    assert loss["default_entity_id"] == "sensor.opendp3_conversion_loss_w"
+    assert loss["state_topic"] == "opendp3/abc/state"
+    assert (loss["unit_of_measurement"], loss["device_class"], loss["state_class"]) == (
+        "W", "power", "measurement")
+    assert "entity_category" not in loss
+    # Unavailable whenever the bridge withholds the value, like a decoder field.
+    assert loss["availability_mode"] == "all"
+    assert [entry["topic"] for entry in loss["availability"]] == [
+        "opendp3/abc/availability", "opendp3/abc/telemetry", "opendp3/abc/state"]
+    assert "value_json.conversion_loss_w" in loss["availability"][2]["value_template"]
+
+
 # --------------------------------------------------------------------------- state
 
 def test_live_session_publishes_observed_values(evidence, packet):
@@ -181,6 +203,70 @@ def test_soc_is_rounded_before_mqtt_publication(evidence, packet):
     assert live
     assert payload["bms_batt_soc"] == 79.6
     assert payload["cms_batt_soc"] == 80.5
+
+
+def test_conversion_loss_comes_from_the_operands_of_the_same_publish(evidence, packet):
+    """One loss value per publish, computed from the operands it carries.
+
+    Home Assistant used to subtract three entities that one /state message
+    updates one after another, re-rendering after each. 56% of the recorded
+    loss states lasted about a millisecond and spanned -856 to +836 W. These
+    frames replay two consecutive production publishes (2026-09-27 05:16:14
+    and 05:16:19 UTC), between which the old template recorded 11 W and -784 W.
+    """
+    store, recorder = evidence
+    add(recorder, packet(seq=1, pow_in_sum_w=396, pow_out_sum_w=400, pow_get_bms=-19), 0)
+    now = recorder.start_utc + int(1e9)
+    payload, live = state_payload(latest(store.path), now_ns=now)
+    assert live
+    assert payload["conversion_loss_w"] == 15.0
+
+    # The device reports only what changed, so the operands of one publish can
+    # come from different frames: output first, then pack power and input.
+    add(recorder, packet(seq=2, pow_out_sum_w=404), 1)
+    add(recorder, packet(seq=3, pow_in_sum_w=1307, pow_get_bms=776), 2)
+    payload, _ = state_payload(latest(store.path), now_ns=now + int(2e9))
+    assert (payload["pow_in_sum_w"], payload["pow_out_sum_w"], payload["pow_get_bms"]) == (
+        1307, 404, 776)
+    assert payload["conversion_loss_w"] == 127.0
+
+
+def test_conversion_loss_is_signed_not_clamped(evidence, packet):
+    # A negative residual is meter disagreement. Clamping it would bias the
+    # accumulated loss energy upward, so it must survive as a negative.
+    store, recorder = evidence
+    add(recorder, packet(seq=1, pow_in_sum_w=100, pow_out_sum_w=90, pow_get_bms=20), 0)
+    payload, live = state_payload(latest(store.path), now_ns=recorder.start_utc + int(1e9))
+    assert live
+    assert payload["conversion_loss_w"] == -10.0
+
+
+@pytest.mark.parametrize("expired", ["pow_in_sum_w", "pow_out_sum_w", "pow_get_bms"])
+def test_conversion_loss_is_withheld_while_any_operand_is_expired(evidence, packet, expired):
+    """Never a partial figure.
+
+    Each field expires on its own timer. Counting a missing operand as zero
+    would book the whole of the other side as loss.
+    """
+    store, recorder = evidence
+    operands = {"pow_in_sum_w": 272, "pow_out_sum_w": 276, "pow_get_bms": -19}
+    add(recorder, packet(seq=1, **operands), 0)
+    # The other two keep arriving; the expired one was last seen at t=0.
+    for index, t in enumerate(range(5, 105, 5), start=2):
+        add(recorder, packet(seq=index, **{key: value + t for key, value in operands.items()
+                                           if key != expired}), t)
+    reading = latest(store.path)
+    payload, live = state_payload(reading, now_ns=recorder.start_utc + int(101e9),
+                                  stale_seconds=45)
+    assert live
+    assert payload[expired] is None
+    assert all(payload[key] is not None for key in operands if key != expired)
+    assert payload["conversion_loss_w"] is None
+    # Nor once the stream itself has gone quiet.
+    payload, live = state_payload(reading, now_ns=recorder.start_utc + int(600e9),
+                                  stale_seconds=45)
+    assert not live
+    assert payload["conversion_loss_w"] is None
 
 
 def test_bridge_lock_rejects_a_second_publisher(tmp_path):
@@ -240,6 +326,43 @@ def test_finished_session_reports_its_own_status(evidence, packet):
     assert (state, live) == ("stopped", False)
 
 
+def test_the_collector_reason_is_published_beside_its_state(evidence, packet, capsys):
+    """Why telemetry stopped, as the collector's own constant.
+
+    collector_state reads waiting or error whatever went wrong, and the reason
+    stayed in the collector's stdout: a re-bound DP3, a full disk and a
+    firmware change the decoder does not know looked alike from Home Assistant.
+    """
+    store, recorder = evidence
+    add(recorder, packet(seq=1, bms_batt_soc=80), 0)
+    discovered = {topic.split("/")[3]: payload for topic, payload in discovery_payloads("abc").items()}
+    reason = discovered["collector_reason"]
+    assert reason["entity_category"] == "diagnostic"
+    # Follows the bridge alone: it has to stay readable while telemetry is down.
+    assert reason["availability_topic"] == "opendp3/abc/availability"
+    assert reason["default_entity_id"] == "sensor.opendp3_collector_reason"
+    bridge, client = bridge_with_fake(store.path)
+    bridge.publish_once()
+    # Nothing recorded yet: left unknown rather than guessed.
+    assert json.loads(client.last("/state"))["collector_reason"] is None
+    store.set_reason("authentication_rejected")
+    capsys.readouterr()
+    bridge.publish_once()
+    assert json.loads(client.last("/state"))["collector_reason"] == "authentication_rejected"
+    assert "collector_reason: - -> authentication_rejected" in capsys.readouterr().out
+
+
+def test_a_database_no_collector_of_this_release_opened_has_no_reason(evidence, packet):
+    """The bridge can read a recording before the new collector has opened it."""
+    store, recorder = evidence
+    add(recorder, packet(seq=1, bms_batt_soc=80), 0)
+    with store.conn:
+        store.conn.execute("DROP TABLE IF EXISTS collector_reason")
+    reading = latest(store.path)
+    assert reading["reason"] is None
+    assert state_payload(reading)[0]["collector_reason"] is None
+
+
 def test_no_sessions_yields_nothing_to_publish(tmp_path):
     from openpowerstation.storage import Store
     with Store(tmp_path / "empty.sqlite", reserve_bytes=0) as store:
@@ -255,21 +378,33 @@ def bridge_with_fake(database, *, stale_seconds=1e9, **overrides):
                   stale_seconds=stale_seconds), client
 
 
-def test_publish_cycle_announces_then_reports_state(evidence, packet):
+@pytest.mark.parametrize("allow_control", [False, True])
+def test_publish_cycle_announces_then_reports_state(evidence, packet, allow_control):
     store, recorder = evidence
     add(recorder, packet(seq=1, bms_batt_soc=80), 0)
-    bridge, client = bridge_with_fake(store.path)
+    bridge, client = bridge_with_fake(store.path, allow_control=allow_control)
     bridge.run(once=True)
     assert client.connected == ("192.0.2.10", 1883)
     discovery = [t for t in client.topics() if t.startswith("homeassistant/")]
-    # Control is off by default, so the only configured entities are the sensors.
-    # The switch topics are still addressed, but to clear any retained config a
-    # previous run with control enabled may have left behind.
-    switches = [t for t in discovery if t.startswith("homeassistant/switch/")]
+    switches = [(topic, payload) for topic, payload, _ in client.published
+                if topic.startswith("homeassistant/switch/")]
     assert len(discovery) - len(switches) == len(entities())
-    assert len(switches) == 2
-    assert all(payload == "" for topic, payload, _ in client.published
-               if topic.startswith("homeassistant/switch/"))
+    if allow_control:
+        # Production runs with control on. Each switch is announced once, as a
+        # real config, and nothing clears it afterwards: an empty retained
+        # payload on a discovery topic deletes the entity from Home Assistant,
+        # and the AC guard scripts would lose their targets on every announce.
+        for topic, payload in switches:
+            assert payload, f"{topic} was cleared by a bridge with control enabled"
+            assert json.loads(payload)["command_topic"].endswith("/set")
+        assert sorted(topic for topic, _ in switches) == sorted(
+            f"homeassistant/switch/opendp3_{bridge.dev_id}/{key}/config" for key, _ in CONTROLS)
+    else:
+        # The only configured entities are the sensors. The switch topics are
+        # still addressed, but to clear any retained config a previous run with
+        # control enabled may have left behind.
+        assert len(switches) == 2
+        assert all(payload == "" for _, payload in switches)
     assert all(retain for topic, _, retain in client.published if topic.startswith("homeassistant/"))
     assert json.loads(client.last("/state"))["bms_batt_soc"] is not None
     # Clean shutdown marks the bridge offline rather than leaving a stale retained value.
@@ -308,7 +443,8 @@ def test_telemetry_availability_is_published_only_on_change(evidence, packet):
     assert [t for t, _, _ in client.published if t.endswith("/telemetry")] == [bridge.base + "/telemetry"]
 
 
-def test_unreadable_database_does_not_stop_the_bridge(tmp_path):
+def test_missing_database_does_not_stop_the_bridge(tmp_path):
+    # No collector has run yet. One that cannot be read: test_bridge_parity.py.
     bridge, client = bridge_with_fake(tmp_path / "missing.sqlite")
     assert bridge.publish_once() is None
     assert bridge.announced, "entities should still exist so the fault is visible"

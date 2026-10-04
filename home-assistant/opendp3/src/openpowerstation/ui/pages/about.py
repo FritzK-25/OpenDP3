@@ -36,8 +36,10 @@ class AboutPage(QWidget):
         versions.body.addWidget(label(f"Application version {__version__}", "muted"))
         versions.body.addWidget(label(f"Decoder version {DECODER_VERSION}", "muted"))
         versions.body.addWidget(label(
-            "Read-only local Bluetooth recorder. It does not bind, unbind, reset, "
-            "modify firmware, or alter any device setting.", "faint", wrap=True))
+            "Local Bluetooth recorder. It does not bind, unbind, reset or modify "
+            "firmware. It changes a device setting only while Allow control is on and "
+            "a Home Assistant bridge relays a command: the DP3 AC outputs, and the "
+            "Jackery's outputs and documented settings.", "faint", wrap=True))
         layout.addWidget(versions)
 
         limits = Card("What this recording can and cannot show")

@@ -13,8 +13,6 @@ either refuses to start rather than competing for the adapter or the broker.
 from __future__ import annotations
 
 import argparse
-import os
-import re
 from pathlib import Path
 import sqlite3
 import subprocess
@@ -28,7 +26,6 @@ ROOT = Path(__file__).resolve().parent.parent
 CONNECT_TIMEOUT = 45.0
 BRIDGE_TIMEOUT = 15.0
 BROKER_CHECK_TIMEOUT = 5.0
-JACKERY_SERIAL_ENV = "OPENDP3_JACKERY_SERIAL"
 # Poll and publish are deliberately NOT the same rate any more. The recorder and
 # the bridge are independent loops, so two equal periods beat against each other
 # and add up to a worst case of both. Publishing is nearly free and only reads
@@ -83,6 +80,12 @@ def jackery_frame_after(database: Path, since_ns: int) -> bool | None:
         return None
 
 
+def configured_jackery(data: Path) -> str:
+    """The Explorer serial config.json names (its jackery_serial); empty for none."""
+    from openpowerstation.config import load_config
+    return load_config(data/"config.json").jackery_serial
+
+
 def verify_broker_state(data: Path, *, dp3: bool, jackery: bool,
                         timeout: float = BROKER_CHECK_TIMEOUT) -> dict[str, dict[str, str | None]]:
     """Read back what each bridge has actually retained on the broker.
@@ -93,25 +96,24 @@ def verify_broker_state(data: Path, *, dp3: bool, jackery: bool,
     (exactly what happened to the Jackery bridge before it grew an on_connect
     handler). This subscribes fresh and reports what is retained right now.
     """
+    from openpowerstation.bridge import HA_ID_PREFIX, device_id
+    from openpowerstation.config import load_config
+    cfg = load_config(data/"config.json")
+    # An Explorer config.json does not name has no topics to read.
+    jackery = jackery and bool(cfg.jackery_serial)
     result: dict[str, dict[str, str | None]] = {}
     if dp3:
         result["DP3"] = {"availability": None, "telemetry": None}
     if jackery:
         result["Jackery"] = {"availability": None, "telemetry": None}
-    if not result:
-        return result
-
-    from openpowerstation.bridge import HA_ID_PREFIX, device_id
-    from openpowerstation.config import load_config
-    cfg = load_config(data/"config.json")
-    if not cfg.mqtt_host:
+    if not result or not cfg.mqtt_host:
         return result
 
     bases = {}
     if dp3:
         bases["DP3"] = HA_ID_PREFIX + "/" + device_id(cfg.serial)
-    if jackery and jackery_serial():
-        bases["Jackery"] = "jackery/" + device_id(jackery_serial())
+    if jackery:
+        bases["Jackery"] = "jackery/" + device_id(cfg.jackery_serial)
     topics = {f"{base}/{kind}": (label, kind) for label, base in bases.items()
               for kind in ("availability", "telemetry")}
 
@@ -216,19 +218,13 @@ def start_bridge(data: Path, python: Path) -> str:
     return "failed"
 
 
-def jackery_serial() -> str | None:
-    """The Jackery serial from the environment, or None when none is configured."""
-    serial = os.environ.get(JACKERY_SERIAL_ENV, "")
-    return serial if re.fullmatch(r"[0-9]{15}", serial) else None
-
-
 def start_jackery_recorder(data: Path, python: Path) -> str:
-    serial = jackery_serial()
-    if serial is None:
-        return "failed"
     database = data/"jackery.sqlite"
     if held(Path(str(database)+".writer.lock")):
         return "already"
+    serial = configured_jackery(data)
+    if not serial:
+        return "unconfigured"
     stop = data/"jackery.stop"
     stop.unlink(missing_ok=True)
     # Local BLE only. There is no account to expire and no cloud to be down, so
@@ -240,8 +236,6 @@ def start_jackery_recorder(data: Path, python: Path) -> str:
 
 
 def start_jackery_bridge(data: Path, python: Path) -> str:
-    if jackery_serial() is None:
-        return "failed"
     if held(data/"jackery-bridge.lock"):
         return "already"
     (data/"jackery-bridge.stop").unlink(missing_ok=True)
@@ -260,15 +254,14 @@ def start_jackery_bridge(data: Path, python: Path) -> str:
 
 
 def bridge_worker(data: Path) -> int:
-    """The bridge itself: single-instance, stoppable by file, run in this process."""
+    """The bridge itself: single-instance, stoppable by file, run in this process.
+
+    Bridge.run() takes the single-instance lock, data/bridge.lock, and refuses
+    with a ValueError while another bridge holds it. Taking it here as well
+    would make the run refuse itself.
+    """
     from openpowerstation.bridge import Bridge
     from openpowerstation.config import load_config
-    lock = portalocker.Lock(str(data/"bridge.lock"), timeout=0)
-    try:
-        lock.acquire()
-    except portalocker.exceptions.LockException:
-        print("A bridge is already publishing; this one is not needed.", file=sys.stderr)
-        return 1
     stop = data/"bridge.stop"
     try:
         worker = Bridge(load_config(data/"config.json"), data/"recordings.sqlite")
@@ -293,25 +286,24 @@ def bridge_worker(data: Path) -> int:
         return 1
     except KeyboardInterrupt:
         pass
-    finally:
-        lock.release()
     return 0
 
 
 def jackery_bridge_worker(data: Path) -> int:
-    """The Jackery bridge itself: single-instance, stoppable by file, run in this process."""
+    """The Jackery bridge itself: single-instance, stoppable by file, run in this process.
+
+    JackeryBridge.run() takes the single-instance lock, data/jackery-bridge.lock,
+    as bridge_worker's bridge does.
+    """
     from openpowerstation.jackery_bridge import JackeryBridge
     from openpowerstation.config import load_config
-    lock = portalocker.Lock(str(data/"jackery-bridge.lock"), timeout=0)
-    try:
-        lock.acquire()
-    except portalocker.exceptions.LockException:
-        print("A Jackery bridge is already publishing; this one is not needed.", file=sys.stderr)
-        return 1
     stop = data/"jackery-bridge.stop"
     try:
-        worker = JackeryBridge(load_config(data/"config.json"), data/"jackery.sqlite",
-                                serial=jackery_serial(), interval=JACKERY_PUBLISH_SECONDS)
+        cfg = load_config(data/"config.json")
+        if not cfg.jackery_serial:
+            raise ValueError("config.json names no Explorer; set its jackery_serial.")
+        worker = JackeryBridge(cfg, data/"jackery.sqlite", cfg.jackery_serial,
+                                interval=JACKERY_PUBLISH_SECONDS)
 
         def watch():
             # Same announce-once-connected shape as the DP3 bridge watcher above,
@@ -331,8 +323,6 @@ def jackery_bridge_worker(data: Path) -> int:
         return 1
     except KeyboardInterrupt:
         pass
-    finally:
-        lock.release()
     return 0
 
 
@@ -340,14 +330,12 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Start local recording and the Home Assistant bridge")
     ap.add_argument("--data-dir", type=Path, default=ROOT/"data")
     ap.add_argument("--no-bridge", action="store_true", help="Record only; leave Home Assistant alone")
-    ap.add_argument("--no-jackery", action="store_true", help=f"Skip the Jackery recorder and bridge (also skipped when {JACKERY_SERIAL_ENV} is unset)")
+    ap.add_argument("--no-jackery", action="store_true", help="Skip the Jackery recorder and bridge")
     ap.add_argument("--gui", action="store_true", help="Also open the desktop viewer")
     ap.add_argument("--bridge-worker", action="store_true", help=argparse.SUPPRESS)
     ap.add_argument("--jackery-bridge-worker", action="store_true", help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
     data = args.data_dir.resolve()
-    if not args.bridge_worker and not args.jackery_bridge_worker and jackery_serial() is None:
-        args.no_jackery = True
     if args.bridge_worker:
         return bridge_worker(data)
     if args.jackery_bridge_worker:
@@ -370,6 +358,19 @@ def main(argv=None) -> int:
         print(f"OpenPowerstation: no device configured yet ({config}). Run setup in the desktop app first.",
               file=sys.stderr)
         return 1
+    from openpowerstation.config import VIEWER_REFUSAL, load_config
+    try:
+        cfg = load_config(config)
+    except ValueError as exc:
+        print(f"OpenPowerstation: {exc}", file=sys.stderr)
+        return 1
+    if cfg.role != "collector":
+        # Every worker would refuse on its own; say so once, before any starts.
+        print(f"OpenPowerstation: {VIEWER_REFUSAL}", file=sys.stderr)
+        return 1
+    if not args.no_jackery and not cfg.jackery_serial:
+        print("Jackery     skipped: config.json names no Explorer (set its jackery_serial).")
+        args.no_jackery = True
 
     started_ns = time.time_ns()
     state = start_collector(data, python)

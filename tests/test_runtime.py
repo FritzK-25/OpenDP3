@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import threading
 from types import SimpleNamespace
 import time
 
@@ -54,6 +55,146 @@ def test_release_resume_without_implicit_reconnect(tmp_path,monkeypatch,packet):
     with read_db(s.database) as db:
         assert db.execute("SELECT COUNT(*) FROM frames").fetchone()[0]==2
 
+
+class ShiftedTime:
+    """The runtime's view of the time module, with the monotonic clock moved by hand."""
+
+    def __init__(self):
+        self.offset = 0.0
+
+    def monotonic(self):
+        return time.monotonic() + self.offset
+
+    def __getattr__(self, name):
+        return getattr(time, name)
+
+
+def record_across_gap(tmp_path, monkeypatch, packet, *, stalled=0.0, slept=0.0):
+    """Record one frame either side of a gap; return (events, incidents, segments).
+
+    ``stalled`` is time the host was awake while the collector's loop did not
+    run; ``slept`` is time the host spent suspended. On Linux the monotonic
+    clock counts only the first, so a suspend never moves it.
+    """
+    clock = ShiftedTime()
+    asleep = [0.0]
+    monkeypatch.setattr("openpowerstation.runtime.time", clock)
+    # raising=False: the collector did not always read a second clock, and this
+    # test has to show what that older loop recorded, not fail to patch it.
+    monkeypatch.setattr("openpowerstation.runtime.host_clocks",
+                        lambda: (clock.monotonic, lambda: clock.monotonic() + asleep[0]),
+                        raising=False)
+
+    async def scan(*_):
+        return [(Identity(cfg().address, cfg().serial, 0, 0x13), object())]
+
+    class Session:
+        def __init__(self, identity, device, uid, on_frame, on_event, allow_control=False):
+            self.on_frame, self.on_event = on_frame, on_event
+
+        async def run(self):
+            self.on_event("connected", "local session", time.time_ns(), time.monotonic_ns())
+            self.on_frame(packet(seq=1, bms_max_cell_temp=23), time.time_ns(), time.monotonic_ns())
+            await asyncio.sleep(0.5)
+            clock.offset += stalled
+            asleep[0] += slept
+            await asyncio.sleep(0.6)
+            self.on_frame(packet(seq=2, bms_max_cell_temp=23), time.time_ns(), time.monotonic_ns())
+            await asyncio.Event().wait()
+
+    monkeypatch.setattr("openpowerstation.runtime.ble.scan", scan)
+    monkeypatch.setattr("openpowerstation.runtime.ble.Session", Session)
+    service = Service(cfg(), tmp_path / "gap.sqlite", lock_dir=tmp_path / "locks")
+    service.start()
+
+    def frames():
+        with read_db(service.database) as db:
+            return db.execute("SELECT COUNT(*) FROM frames").fetchone()[0]
+
+    try:
+        wait_for(lambda: service.database.exists() and frames() == 2)
+    finally:
+        service.stop()
+        service.join(5)
+    assert not service.is_alive()
+    assert not service.error
+    with read_db(service.database) as db:
+        events = [(r[0], r[1]) for r in db.execute("SELECT kind,detail FROM events ORDER BY id")]
+        incidents = db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
+        segments = [r[0] for r in db.execute("SELECT segment FROM frames ORDER BY id")]
+    return events, incidents, segments
+
+
+def test_collector_stall_while_awake_is_not_recorded_as_a_suspend(tmp_path, monkeypatch, packet):
+    """A 12 s stall of an awake collector used to pin a host_suspend incident.
+
+    On the Pi that happened about once a minute: the incident flag stayed on and
+    every pinned window escaped retention. A stall loses no frames -- they queue
+    and are stamped late -- so it is a diagnostic, not a gap.
+    """
+    events, incidents, segments = record_across_gap(tmp_path, monkeypatch, packet, stalled=12)
+    kinds = [kind for kind, _ in events]
+    assert "host_suspend" not in kinds, events
+    assert kinds.count("loop_stall") == 1, events
+    detail = dict(events)["loop_stall"]
+    assert "12." in detail and "awake" in detail
+    assert incidents == 0
+    assert segments[0] == segments[1]
+
+
+def test_host_suspend_is_still_recorded_and_pinned(tmp_path, monkeypatch, packet):
+    """A real suspend stays a gap, including on Linux, where monotonic time hides it."""
+    events, incidents, segments = record_across_gap(tmp_path, monkeypatch, packet, slept=30)
+    kinds = [kind for kind, _ in events]
+    assert kinds.count("host_suspend") == 1, events
+    assert "loop_stall" not in kinds
+    assert "30." in dict(events)["host_suspend"]
+    assert incidents == 1
+    assert segments[1] == segments[0] + 1
+
+
+def test_a_neighbouring_dp3_is_never_attached(tmp_path, monkeypatch):
+    """Only the configured serial AT the configured address gets a session.
+
+    Every other runtime test scans exactly the configured unit, so the match
+    itself was never exercised. Attaching to whichever DP3 advertises first
+    would either fail authentication, which stops the collector, or, on the
+    same account, record that unit as this one and send it this unit's AC
+    commands. Each neighbour here matches one half of the identity, so
+    dropping either check attaches to it.
+    """
+    scans, sessions = [], []
+    neighbours = [
+        (Identity("11:22:33:44:55:66", cfg().serial, 0, 0x13), object()),
+        (Identity(cfg().address, "MR51ABCDEFGHIJKL", 0, 0x13), object()),
+    ]
+
+    async def scan(*_):
+        scans.append(1)
+        return neighbours
+
+    class Session:
+        def __init__(self, identity, *args, **kwargs):
+            sessions.append(identity)
+
+        async def run(self):
+            await asyncio.Event().wait()
+
+    monkeypatch.setattr("openpowerstation.runtime.ble.scan", scan)
+    monkeypatch.setattr("openpowerstation.runtime.ble.Session", Session)
+    s = Service(cfg(), tmp_path / "live.sqlite", lock_dir=tmp_path / "locks")
+    s.start()
+    try:
+        # "authenticating" is set just before a session is built, so waiting on
+        # it too makes a wrongly attached neighbour fail below, not time out.
+        wait_for(lambda: s.state in ("reconnecting", "authenticating"))
+    finally:
+        s.stop(); s.join(5)
+    assert not s.is_alive()
+    assert scans
+    assert sessions == [], f"attached to a DP3 that is not the configured one: {sessions}"
+
+
 def test_authentication_failure_stops_no_retries(tmp_path,monkeypatch):
     attempts=[]
     async def scan(*_):
@@ -65,6 +206,171 @@ def test_authentication_failure_stops_no_retries(tmp_path,monkeypatch):
     assert not s.is_alive()
     assert s.state=="error"
     assert len(attempts)==1
+
+
+def collector_reason(database):
+    with read_db(database) as db:
+        row = db.execute("SELECT reason FROM collector_reason").fetchone()
+    return row[0] if row else None
+
+
+@pytest.mark.parametrize("cause", ["not_advertising", "radio_busy", "bluetooth_error"])
+def test_a_failed_attempt_says_why_and_pins_nothing(tmp_path, monkeypatch, cause):
+    """An attempt that never connected lost no link, and its cause is kept.
+
+    Every such failure was recorded as disconnected, "Bluetooth transport
+    failed; device state is unknown.": the exception's text discarded, the
+    add-on log saying only "Retry in 2s", and a new segment and a pinned
+    incident each time, as though a live session had dropped. A DP3 slow to
+    come back -- 11 minutes after the nightly backup -- could not be put down
+    to the other collector holding the radio, a DP3 not advertising, or BlueZ.
+    """
+    from openpowerstation import radio
+    shown = {"not_advertising": "not advertising", "radio_busy": "lease unavailable",
+             "bluetooth_error": "orphaned DP3 link"}[cause]
+    retries = []
+
+    async def scan(*_):
+        if cause == "bluetooth_error":
+            # What the add-on's BlueZ orphan cleanup raises before a scan.
+            raise ConnectionError("BlueZ could not release the orphaned DP3 link")
+        return []
+
+    monkeypatch.setattr("openpowerstation.runtime.ble.scan", scan)
+    monkeypatch.setattr(radio, "RADIO_LOCK_TIMEOUT", 0.05)
+    other_collector = portalocker.Lock(str(radio.radio_lock_path(tmp_path)), timeout=0)
+    if cause == "radio_busy":
+        other_collector.acquire()
+    s = Service(cfg(), tmp_path / "live.sqlite", lock_dir=tmp_path / "locks",
+                notify=lambda update: update["state"] == "reconnecting"
+                and retries.append(update["detail"]))
+    try:
+        s.start()
+        wait_for(lambda: retries)
+    finally:
+        s.stop(); s.join(5)
+        if cause == "radio_busy":
+            other_collector.release()
+    assert not s.is_alive()
+    with read_db(s.database) as db:
+        events = [(r[0], r[1]) for r in db.execute("SELECT kind,detail FROM events ORDER BY id")]
+        incidents = db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
+    assert "disconnected" not in [kind for kind, _ in events], events
+    failures = [detail for kind, detail in events if kind == "connection_failed"]
+    assert failures, events
+    assert f"reason={cause}" in failures[0] and shown in failures[0], failures[0]
+    assert "operation=connect" in failures[0] and "stage=scanning" in failures[0]
+    assert incidents == 0
+    assert f"({cause})" in retries[0], retries
+    assert collector_reason(s.database) == cause
+
+
+def test_a_lost_link_keeps_its_incident_and_data_clears_the_reason(tmp_path, monkeypatch, packet):
+    """A session that had connected did lose a link: still a pinned disconnected.
+
+    The reason stays until a session delivers measurements again, not merely
+    authenticates: that is the 09-19 shape, connected and saying nothing.
+    """
+    starts, deliver = [], threading.Event()
+
+    async def scan(*_):
+        return [(Identity(cfg().address, cfg().serial, 0, 0x13), object())]
+
+    class Session:
+        def __init__(self, identity, device, uid, on_frame, on_event, allow_control=False):
+            self.on_frame, self.on_event = on_frame, on_event
+
+        async def run(self):
+            starts.append(1)
+            self.on_event("connected", "local session", time.time_ns(), time.monotonic_ns())
+            if len(starts) == 1:
+                self.on_frame(packet(seq=1, bms_max_cell_temp=23), time.time_ns(), time.monotonic_ns())
+                raise ConnectionError("Bluetooth disconnected.")
+            while not deliver.is_set():
+                await asyncio.sleep(0.01)
+            self.on_frame(packet(seq=2, bms_max_cell_temp=23), time.time_ns(), time.monotonic_ns())
+            await asyncio.Event().wait()
+
+    monkeypatch.setattr("openpowerstation.runtime.ble.scan", scan)
+    monkeypatch.setattr("openpowerstation.runtime.ble.Session", Session)
+    monkeypatch.setattr("openpowerstation.runtime.RECONNECT_DELAY", 0.1)
+    s = Service(cfg(), tmp_path / "live.sqlite", lock_dir=tmp_path / "locks")
+    s.start()
+    try:
+        wait_for(lambda: len(starts) == 2 and s.state == "recording")
+        connected_but_quiet = collector_reason(s.database)
+        deliver.set()
+        wait_for(lambda: collector_reason(s.database) == "none")
+    finally:
+        s.stop(); s.join(5)
+    assert connected_but_quiet == "link_lost"
+    with read_db(s.database) as db:
+        drops = [r[0] for r in db.execute("SELECT detail FROM events WHERE kind='disconnected'")]
+        incidents = db.execute("SELECT COUNT(*) FROM incidents").fetchone()[0]
+    assert len(drops) == 1 and drops[0].startswith("reason=link_lost; "), drops
+    assert incidents == 1
+
+
+@pytest.mark.parametrize("message,reason", [
+    ("Device rejected authentication. Verify account binding and user ID.",
+     "authentication_rejected"),
+    ("Unsupported advertised DP3 protocol; no fallback attempted.", "protocol_unsupported"),
+])
+def test_a_refused_handshake_stops_collection_and_says_which_refusal(
+        tmp_path, monkeypatch, message, reason):
+    """A rebound DP3 needs new credentials; a firmware change needs a decoder update.
+
+    Both stopped collection as "error", and the add-on restarted the collector
+    every 15 seconds; Home Assistant could not tell which had happened.
+    """
+    from openpowerstation.protocol import AuthenticationError, CredentialsRejected
+    refusal = CredentialsRejected if reason == "authentication_rejected" else AuthenticationError
+
+    async def scan(*_):
+        return [(Identity(cfg().address, cfg().serial, 0, 0x13), object())]
+
+    class Session:
+        def __init__(self, identity, device, uid, on_frame, on_event, allow_control=False):
+            pass
+
+        async def run(self):
+            raise refusal(message)
+
+    monkeypatch.setattr("openpowerstation.runtime.ble.scan", scan)
+    monkeypatch.setattr("openpowerstation.runtime.ble.Session", Session)
+    s = Service(cfg(), tmp_path / "live.sqlite", lock_dir=tmp_path / "locks")
+    s.start(); s.join(4)
+    assert not s.is_alive()
+    assert s.state == "error" and s.error == message
+    with read_db(s.database) as db:
+        failures = [r[0] for r in db.execute("SELECT detail FROM events WHERE kind='connection_failed'")]
+    assert failures == [f"reason={reason}; {message}"]
+    assert collector_reason(s.database) == reason
+
+
+def test_a_start_below_the_storage_reserve_leaves_its_reason(tmp_path, monkeypatch):
+    """No recording opens below the reserve, so nothing else would say why.
+
+    The collector exits, the add-on starts it again every 15 seconds, and Home
+    Assistant went on showing the last session's status.
+    """
+    s = Service(cfg(), tmp_path / "live.sqlite", lock_dir=tmp_path / "locks")
+    monkeypatch.setattr("openpowerstation.storage.shutil.disk_usage", lambda _: SimpleNamespace(free=0))
+    s.start(); s.join(4)
+    assert not s.is_alive()
+    assert "Storage reserve reached" in s.error
+    assert collector_reason(s.database) == "storage_reserve"
+
+
+def test_every_reason_is_documented_for_the_operator():
+    """The reference's table is the runbook, so it names exactly the codes in use."""
+    from pathlib import Path
+    import re
+    from openpowerstation.runtime import REASONS
+    readme = (Path(__file__).resolve().parents[1] / "docs" / "REFERENCE.md").read_text(encoding="utf-8")
+    section = readme.split("#### `collector_reason`", 1)[1].split("\n#", 1)[0]
+    documented = re.findall(r"^\| `([a-z_]+)` \|", section, flags=re.MULTILINE)
+    assert sorted(documented) == sorted(REASONS)
 
 
 def test_saved_control_revocation_is_enforced_without_restarting_dp3(tmp_path, monkeypatch):
@@ -127,7 +433,7 @@ def test_device_lock_shared_across_database_paths(tmp_path,monkeypatch):
 PERSISTED={"address","serial","user_id","region","firmware","conditions",
            "temperature_jump","temperature_window","mqtt_host","mqtt_port",
            "mqtt_username","mqtt_password","mqtt_tls","mqtt_interval",
-           "allow_control"}
+           "allow_control","jackery_serial","role"}
 
 def test_setup_persists_only_permitted_config(tmp_path):
     c=cfg(); path=tmp_path/"config.json"
@@ -135,13 +441,14 @@ def test_setup_persists_only_permitted_config(tmp_path):
     assert load_config(path)==c
     stored=json.loads(path.read_text())
     # An allowlist, so no future field can quietly start persisting an account secret.
-    assert set(stored)==PERSISTED
+    # Where DPAPI exists the user ID is kept in its protected form as well.
+    assert set(stored)==PERSISTED|({"user_id_dpapi"} if os.name=="nt" else set())
     assert "token" not in path.read_text()
     # No EcoFlow account password is ever a stored field, and the broker
     # credential the bridge needs stays empty until it is deliberately set.
     assert stored["mqtt_password"]==""
 
-@pytest.mark.skipif(os.name != "nt", reason="real Windows DPAPI")
+@pytest.mark.skipif(os.name != "nt", reason="DPAPI is Windows-only")
 def test_broker_password_is_written_to_exactly_one_field(tmp_path):
     # DPAPI-protected at rest (see config.py, docs/SECURITY.md): no field
     # holds the plaintext value, and the encrypted form lives in exactly the

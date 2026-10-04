@@ -10,6 +10,10 @@ import subprocess
 import sys
 import tomllib
 
+# pytest itself depends on packaging, so every test environment has it.
+from packaging.requirements import Requirement
+from packaging.utils import canonicalize_name
+
 PROJECT = Path(__file__).resolve().parents[1]
 SOURCE = PROJECT / "src"
 # Chart rendering for evidence exports: a CLI capability, not a desktop one.
@@ -208,14 +212,33 @@ def test_each_guard_names_an_extra_that_supplies_what_it_is_missing():
         assert package in extra_closure(extra), (module, extra, package)
 
 
+def requirement_lines(path):
+    """The requirement text of each line of a requirements file, comments and
+    hash continuations dropped."""
+    text = path.read_text(encoding="utf-8").replace("\\\n", " ")
+    lines = (line.split("#", 1)[0].strip() for line in text.splitlines())
+    return [line.split()[0] for line in lines if line]
+
+
 def test_production_requirements_match_the_core_dependencies():
-    """home-assistant/opendp3 pins the same set the package declares, and nothing more."""
-    headless = PROJECT / "home-assistant" / "opendp3" / "requirements-headless.in"
-    pinned = requirement_names(
-        line for line in headless.read_text(encoding="utf-8").splitlines()
-        if line.strip() and not line.strip().startswith("#")
-    )
-    assert pinned == requirement_names(metadata()["dependencies"]), (
-        "the add-on's pinned headless environment and the package's core "
-        "dependencies have drifted"
-    )
+    """home-assistant/opendp3 pins every core dependency inside the range the package
+    declares, and its hashed lock carries no desktop package.
+
+    Names alone were compared before, so a pin outside the declared range
+    shipped to the Pi while CI tested the range.
+    """
+    app = PROJECT / "home-assistant" / "opendp3"
+    pins = {}
+    for line in requirement_lines(app / "requirements-headless.in"):
+        pinned = Requirement(line)
+        (version,) = [specifier.version for specifier in pinned.specifier if specifier.operator == "=="]
+        pins[canonicalize_name(pinned.name)] = version
+    for declared in map(Requirement, metadata()["dependencies"]):
+        name = canonicalize_name(declared.name)
+        assert name in pins, f"the add-on does not pin core dependency {declared.name}"
+        assert declared.specifier.contains(pins[name]), (
+            f"the add-on pins {declared.name}=={pins[name]}, outside the "
+            f"package's declared range {declared.specifier}"
+        )
+    locked = requirement_names(requirement_lines(app / "requirements-headless.txt"))
+    assert not (locked & OPTIONAL_PACKAGES), sorted(locked & OPTIONAL_PACKAGES)

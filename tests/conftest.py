@@ -26,12 +26,12 @@ def evidence(tmp_path):
 def no_modal_dialogs(monkeypatch):
     """Fail a test that opens a modal dialog instead of hanging the whole run.
 
-    Offscreen, nobody can click the dialog away: one QMessageBox.warning left
-    the Linux CI job waiting until it was cancelled. Tests that expect an error
-    patch show_error themselves, which takes precedence over this.
+    Offscreen, nobody can click the dialog away, so the run blocks until CI
+    cancels it with no traceback. These are the GUI's modal entry points. Tests
+    that expect an error patch show_error themselves, which takes precedence.
     """
     try:
-        from PySide6.QtWidgets import QFileDialog, QMessageBox
+        from PySide6.QtWidgets import QDialog, QFileDialog, QInputDialog, QMessageBox
     except ImportError:
         return
     def refuse(*args, **kwargs):
@@ -40,9 +40,55 @@ def no_modal_dialogs(monkeypatch):
         monkeypatch.setattr(QMessageBox, name, refuse)
     for name in ("getOpenFileName", "getSaveFileName", "getExistingDirectory"):
         monkeypatch.setattr(QFileDialog, name, refuse)
+    for name in ("getText", "getItem", "getInt", "getDouble"):
+        monkeypatch.setattr(QInputDialog, name, refuse)
+    monkeypatch.setattr(QDialog, "exec", refuse)
 
 def add(rec,raw,t,wall_offset=0):
     rec.ingest(raw,rec.start_utc+int((t+wall_offset)*1e9),rec.start_mono+int(t*1e9))
+
+def jackery_session(store, *, seconds, step, utc_ns=1_800_000_000_000_000_000, finished=True,
+                    **properties):
+    """A local-BLE Explorer session: one status reply every ``step`` seconds.
+
+    The reply carries every field the desktop charts for an Explorer -- AC
+    voltage and frequency, an estimated time, both output states -- unless
+    ``properties`` overrides them. Unless ``finished`` is false, the session
+    is then finished as its recorder would.
+    """
+    import json
+    from openpowerstation.jackery_fields import map_properties
+    from openpowerstation.recorder import Recorder
+    recorder = Recorder(store, utc_ns=utc_ns, mono_ns=0, firmware="Jackery Explorer 1000 v2 TEST",
+                        conditions="Jackery local BLE transport", expected_interval=step,
+                        retain_days=None)
+    for t in range(0, seconds, step):
+        reply = {"rb": 80, "bt": 251, "op": 120 + t % 7, "ip": 0, "acov": 1200, "acohz": 60,
+                 "oac": 1, "odc": 0, "ot": 55, **properties}
+        fields = {"device": {"serial": "TEST"}, "properties": reply}
+        recorder.ingest_observation(json.dumps(fields).encode(), fields, map_properties(reply),
+                                    utc_ns=recorder.start_utc + t * 10**9,
+                                    mono_ns=recorder.start_mono + t * 10**9)
+    if finished:
+        recorder.finish(mono_ns=recorder.start_mono + (seconds - step) * 10**9)
+    return recorder
+
+def compacted_jackery(path, hours=3):
+    """An Explorer session polled every 30 s, then thinned as its recorder would.
+
+    The downsampler keeps the first reply of each minute (and its extremes),
+    the history every Jackery database holds after 48 hours. A steady load,
+    so no extreme keeps a second reply: two minutes' kept frames are a
+    minute apart.
+    """
+    from openpowerstation.jackery_fields import PEAK_KEYS
+    from openpowerstation.storage import Store
+    with Store(path, reserve_bytes=0) as store:
+        recorder = jackery_session(store, seconds=hours * 3600, step=30, op=120)
+        summary = store.downsample(recorder.start_utc + 10 * 86_400 * 10**9,
+                                   bucket_seconds=60, peak_keys=PEAK_KEYS)
+        assert summary["deleted"] > 0
+    return path
 
 def pump(predicate, timeout=8.0):
     """Spin the Qt event loop until predicate() is true. Returns its final value.

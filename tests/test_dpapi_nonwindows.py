@@ -84,3 +84,27 @@ def test_leftover_temp_file_is_tightened_before_the_password_is_written(tmp_path
 
     assert json.loads(leftover.read_text(encoding="utf-8"))["mqtt_password"] == "secret"
     assert leftover.stat().st_mode & 0o777 == 0o600
+def test_save_config_writes_a_broker_password_owner_only_from_the_start(tmp_path, monkeypatch):
+    from openpowerstation import config
+    path = tmp_path / "config.json"
+    # A stale temporary file from an interrupted save keeps its mode unless
+    # save_config resets it.
+    path.with_suffix(".tmp").write_text("", encoding="utf-8")
+    path.with_suffix(".tmp").chmod(0o644)
+    modes = []
+    real_replace = os.replace
+
+    def replace(source, destination):
+        modes.append(os.stat(source).st_mode & 0o777)
+        real_replace(source, destination)
+    monkeypatch.setattr(config.os, "replace", replace)
+
+    config.save_config(config.Config("AA:BB:CC:DD:EE:FF", "MR51123456789012", "123456",
+                                     mqtt_host="broker", mqtt_password="secret"), path)
+
+    # Owner-only before the rename, not only after it.
+    assert modes == [0o600]
+    assert path.stat().st_mode & 0o777 == 0o600
+    stored = json.loads(path.read_text(encoding="utf-8"))
+    assert stored["mqtt_password"] == "secret" and "mqtt_password_dpapi" not in stored
+    assert load_config(path).mqtt_password == "secret"
