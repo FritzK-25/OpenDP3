@@ -228,7 +228,9 @@ def test_export_scope_is_the_button_pressed_not_a_hidden_selection(qtbot, tmp_pa
     w.pages['exports'].export_button.click()
     incidents.export_button.click()
     assert pump(lambda: len(exported) == 3 and not w.jobs)
-    assert exported == [(sessions[1], None), (sessions[1], None), (sessions[1], chosen)]
+    # Each export runs in its own thread, so they may finish in any order.
+    assert sorted(exported, key=lambda scope: scope[1] or 0) == [
+        (sessions[1], None), (sessions[1], None), (sessions[1], chosen)]
     # Another session: its incident sits in the same row, and nobody chose it.
     w.session_choice.setCurrentIndex(w.session_choice.findData(sessions[0]))
     assert pump(lambda: w.snap['session']['id'] == sessions[0] and not w.jobs)
