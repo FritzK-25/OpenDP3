@@ -10,9 +10,9 @@ def test_history_report_identifies_objects_without_disclosing_credential_values(
     oid = "a" * 40
     def git(*args):
         if args[0] == "rev-list":
-            return f"{oid} old-config.txt\n".encode()
-        if args[:2] == ("cat-file", "-t"):
-            return b"blob\n"
+            return f"{oid}\n".encode()
+        if args[0] == "ls-tree":
+            return f"100644 blob {oid}\told-config.txt\0".encode()
         key = "mqtt_" + "password"
         return f'{key} = "{secret}"\n'.encode()
     monkeypatch.setattr(audit_history, "git", git)
