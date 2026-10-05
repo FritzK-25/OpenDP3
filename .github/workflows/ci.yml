@@ -61,8 +61,8 @@ jobs:
 
   # This repository is public, so a commit's author and committer email is
   # published with it. Every new commit must use a GitHub no-reply address.
-  # The file scan for personal identifiers runs in the test suite
-  # (tests/test_privacy_check.py). On main this also catches merge commits
+  # Scan tracked files directly; regression tests separately exercise the scanner.
+  # On main the metadata check also catches merge commits
   # made in the GitHub web interface, which use the account's email setting.
   privacy:
     runs-on: ubuntu-latest
