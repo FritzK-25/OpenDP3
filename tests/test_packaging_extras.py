@@ -188,7 +188,9 @@ def test_export_explains_the_missing_extra_at_the_chart_boundary(tmp_path):
     result = run_headless(
         "from openpowerstation.demo import make_demo\n"
         "from openpowerstation.cli import main\n"
-        f"make_demo({str(database)!r})\n"
+        # One observation reaches the same chart boundary. The default demo
+        # records 900 observations, needlessly competing with parallel CI I/O.
+        f"make_demo({str(database)!r}, seconds=1)\n"
         f"code = main(['export', {str(database)!r}, {str(destination)!r}])\n"
         "print('exit', code)\n"
     )

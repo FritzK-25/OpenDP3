@@ -42,18 +42,15 @@ def smoke_test(destination: Path) -> int:
         from Crypto.Cipher import AES
         import bleak.backends.winrt.client
         import bleak.backends.winrt.scanner  # noqa: F401
-        import ecdsa
+        from .ecdh import EphemeralKey
         import openpowerstation
         result["app_version"] = openpowerstation.__version__
         result["decoder_version"] = openpowerstation.DECODER_VERSION
         # Load the native crypto extension as well as the Python wrapper.
         AES.new(bytes(16), AES.MODE_CBC, bytes(16)).encrypt(bytes(16))
         # Exercise the ephemeral secp160r1 ECDH that ble.authenticate() performs.
-        # Nothing in OpenPowerstation signs with ecdsa, so a signing check proved nothing
-        # the DP3 login needs.
-        ours, theirs = (ecdsa.SigningKey.generate(curve=ecdsa.SECP160r1) for _ in range(2))
-        assert (ecdsa.ECDH(ecdsa.SECP160r1, ours, theirs.get_verifying_key()).generate_sharedsecret_bytes()
-                == ecdsa.ECDH(ecdsa.SECP160r1, theirs, ours.get_verifying_key()).generate_sharedsecret_bytes())
+        with EphemeralKey() as ours, EphemeralKey() as theirs:
+            assert ours.exchange(theirs.public_bytes()) == theirs.exchange(ours.public_bytes())
         result["adapter"] = asyncio.run(adapter_status())
         result["module_file"] = openpowerstation.__file__
         result["python_paths"] = list(sys.path)

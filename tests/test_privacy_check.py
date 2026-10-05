@@ -62,6 +62,75 @@ def test_denied_terms_match_case_insensitively():
     assert privacy_check.findings_in_text("sensor.kitchen_power", ["alex_s_office"]) == []
 
 
+@pytest.mark.parametrize("key,value", [
+    ("mqtt_password", "review" + "-credential-9xQ"),
+    ("user_id", "98765" + "4321"),
+    ("jackery_serial", "987654" + "321098765"),
+    ("access_token", "review" + "-token-9xQ"),
+])
+def test_sensitive_literal_assignments_are_rejected_without_echoing_values(key, value):
+    problems = privacy_check.findings_in_text(f'{key} = "{value}"')
+    assert problems
+    assert all(value not in problem for problem in problems)
+
+
+@pytest.mark.parametrize("separator", [": ", " = "])
+@pytest.mark.parametrize("value", ["review" + "-credential-9xQ", "98765" + "4321"])
+def test_unquoted_credentials_are_rejected(separator, value):
+    assert privacy_check.findings_in_text("mqtt_password" + separator + value)
+
+
+def test_history_checks_every_name_of_a_shared_blob(tmp_path, monkeypatch):
+    import audit_history
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    (repo / "0-generic.txt").write_text("generic\n", "utf-8")
+    _git(repo, "add", ".")
+    env = {**os.environ, "GIT_AUTHOR_NAME": "Example", "GIT_COMMITTER_NAME": "Example",
+           "GIT_AUTHOR_EMAIL": "user@example.com", "GIT_COMMITTER_EMAIL": "user@example.com"}
+    _git(repo, "commit", "-qm", "first", env=env)
+    private = PERSONAL + ".txt"
+    (repo / private).write_text("generic\n", "utf-8")
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "copy", env=env)
+    monkeypatch.setattr(privacy_check, "ROOT", repo)
+    assert any(row.get("path") == private and row["category"] == "path identifier"
+               for row in audit_history.audit()["findings"])
+
+
+def test_rules_update_preserves_additional_live_protections(tmp_path, monkeypatch):
+    import repository_rules
+    import json
+    path = tmp_path / ".github" / "rulesets"
+    path.mkdir(parents=True)
+    (path / "main.json").write_text(json.dumps({"name": "main", "rules": [{"type": "deletion"}]}))
+    additional = {"type": "required_signatures"}
+    applied = []
+    def api(endpoint, method="GET", payload=None):
+        if method == "PUT":
+            applied.append(payload)
+            return payload
+        if endpoint == "rulesets":
+            return [{"name": "main", "id": 1}]
+        return {"rules": [{"type": "deletion"}, additional]}
+    monkeypatch.setattr(repository_rules, "ROOT", tmp_path)
+    monkeypatch.setattr(repository_rules, "api", api)
+    monkeypatch.setattr(sys, "argv", ["repository_rules.py", "--apply"])
+    repository_rules.main()
+    assert additional in applied[0]["rules"]
+
+
+def test_private_filename_is_scanned_even_when_content_is_generic(tmp_path):
+    (tmp_path / "private-room.txt").write_text("generic", "utf-8")
+    assert privacy_check.scan_files(privacy_check.files_under(tmp_path), tmp_path, ["private-room"])
+
+
+def test_binary_publication_requires_review(tmp_path):
+    (tmp_path / "capture.zip").write_bytes(b"opaque")
+    assert privacy_check.main(["--path", str(tmp_path)]) == 1
+
+
 def test_deny_file_skips_comments_and_blank_lines(tmp_path):
     deny = tmp_path / "deny.txt"
     deny.write_text("# private terms\n\nalex\n  garage  \n", "utf-8")

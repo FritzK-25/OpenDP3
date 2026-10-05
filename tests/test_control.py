@@ -416,14 +416,17 @@ def test_collector_records_an_unguarded_press_and_never_sends_it(tmp_path, monke
     service = Service(config, database, lock_dir=tmp_path / "locks")
     service.start()
     try:
-        wait_for(lambda: service.state == "recording")
+        # Real SQLite initialization competes with other hosted Windows workers.
+        # The command/guard assertions below retain their four-second budget.
+        wait_for(lambda: service.state == "recording", timeout=30)
         deliver(bridge, "cfg_lv_ac_out_open", b"OFF")
         wait_for(lambda: events("control_refused"))
         deliver(bridge, "cfg_lv_ac_out_open", b"GUARDED_OFF")
         wait_for(lambda: events("control"))
     finally:
         service.stop()
-        service.join(5)
+        service.join(30)
+        assert not service.is_alive(), "Collector test left a background writer running"
     assert not service.error
     assert sent == [("cfg_lv_ac_out_open", False)]
     [refusal] = events("control_refused")
@@ -438,9 +441,12 @@ def test_bridge_control_queue_is_bounded_without_collector(tmp_path, monkeypatch
     bridge = Bridge(make_config(allow_control=True), database, client=None)
     total = CONTROL_QUEUE_MAX_FILES + 25
     ticks = iter(10**18 + index for index in range(total))
-    monkeypatch.setattr("openpowerstation.bridge.time.time_ns", lambda: next(ticks))
+    # Replace this module's clock reference, not the shared stdlib module used
+    # by background collectors and unrelated code in this worker.
+    monkeypatch.setattr("openpowerstation.control_queue.time", SimpleNamespace(time_ns=lambda: next(ticks)))
 
     for index in range(total):
+        time.time_ns()  # Unrelated clock reads must not consume the queue's fixture.
         key = "cfg_hv_ac_out_open" if index % 2 == 0 else "cfg_lv_ac_out_open"
         bridge.queue_control(key, "GUARDED_ON" if index == total - 1 else "GUARDED_OFF")
 
@@ -458,7 +464,7 @@ def test_bounded_queue_still_delivers_a_fresh_surviving_command(tmp_path, monkey
     total = CONTROL_QUEUE_MAX_FILES + 3
     start = time.time_ns()
     ticks = iter(start + index for index in range(total))
-    monkeypatch.setattr("openpowerstation.bridge.time.time_ns", lambda: next(ticks))
+    monkeypatch.setattr("openpowerstation.control_queue.time", SimpleNamespace(time_ns=lambda: next(ticks)))
     for index in range(total):
         bridge.queue_control("cfg_hv_ac_out_open",
                              "GUARDED_ON" if index == total - 1 else "GUARDED_OFF")

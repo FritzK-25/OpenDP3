@@ -61,8 +61,8 @@ jobs:
 
   # This repository is public, so a commit's author and committer email is
   # published with it. Every new commit must use a GitHub no-reply address.
-  # The file scan for personal identifiers runs in the test suite
-  # (tests/test_privacy_check.py). On main this also catches merge commits
+  # Scan tracked files directly; regression tests separately exercise the scanner.
+  # On main the metadata check also catches merge commits
   # made in the GitHub web interface, which use the account's email setting.
   privacy:
     runs-on: ubuntu-latest
@@ -78,6 +78,8 @@ jobs:
         env:
           RANGE: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || format('{0}..{1}', github.event.before, github.sha) }}
         run: python scripts/privacy_check.py --commits "$RANGE"
+      - name: Tracked files pass publication checks
+        run: python scripts/privacy_check.py
 
   # The release build, with the release's pinned environment. Runs here so a
   # broken build or a lockfile/pyproject mismatch shows up before tagging.
@@ -124,6 +126,9 @@ jobs:
             opendp3-app:ci python -c "
           import json, openpowerstation, openpowerstation.cli, openpowerstation.bridge, openpowerstation.jackery_bridge, openpowerstation.recorder
           import run, linux_worker, bluetooth_status
+          from openpowerstation.ecdh import EphemeralKey
+          with EphemeralKey() as ours, EphemeralKey() as theirs:
+              assert ours.exchange(theirs.public_bytes()) == theirs.exchange(ours.public_bytes())
           provenance = json.load(open('/opt/opendp3/SOURCE-PROVENANCE.json'))
           assert provenance['version'] == openpowerstation.__version__, provenance
           import os, platform
@@ -146,3 +151,19 @@ jobs:
         run: |
           echo "home-assistant-image: $RESULT"
           test "$RESULT" = success
+
+  publication-gate:
+    needs: [test, lint, privacy, windows-build, home-assistant-app]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: All publication checks succeeded
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          results = json.loads(os.environ['RESULTS'])
+          assert results and all(job['result'] == 'success' for job in results.values()), results
+          PY

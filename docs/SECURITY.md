@@ -155,6 +155,21 @@ and stop connecting if the selected device's behavior or identity is unexpected.
 
 ## Encryption and packet checks
 
+The DP3 type 7 handshake uses native OpenSSL 3 secp160r1 ECDH instead of
+python-ecdsa, affected by [GHSA-wj6h-64fc-37mp](https://github.com/advisories/GHSA-wj6h-64fc-37mp).
+The peer's two 20-byte coordinates and the 20-byte shared secret retain their
+existing wire representation. Private keys remain inside native memory and are
+freed immediately after exchange. Invalid points are rejected before derivation.
+Windows uses the crypto DLL beside CPython's `_ssl` module; the frozen build
+includes that runtime. Linux requires the image/system OpenSSL 3 library. Missing
+native support fails closed; there is no Python arithmetic fallback.
+
+This removes the affected Python dependency, rather than claiming a timing audit
+of every native implementation. The device fixes the legacy 160-bit curve; this
+change neither upgrades its strength nor adds peer authentication. Synthetic
+exchange tests and native image checks do not qualify a new firmware or a live
+radio session. Keep the runtime and container base patched.
+
 The inherited type 1/type 7 codecs use AES-CBC without an application-level MAC
 or authenticated-encryption tag. Classic cipher modes provide confidentiality,
 not authenticated integrity; see the [PyCryptodome cipher documentation](https://www.pycryptodome.org/src/cipher/classic).

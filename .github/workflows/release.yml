@@ -11,12 +11,23 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   version:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Exact tagged commit was accepted on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          python3 scripts/release_gate.py --commit "$GITHUB_SHA" --repository "$REPOSITORY"
       - name: Tag matches the package version
         run: |
           version=$(python3 packaging/project_version.py)
