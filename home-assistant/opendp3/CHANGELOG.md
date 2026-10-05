@@ -1,4 +1,4 @@
-# Unreleased
+# 0.3.1
 
 - Replace the affected python-ecdsa dependency with native OpenSSL 3 for the
   DP3's ephemeral secp160r1 handshake, preserving its wire format and rejecting
