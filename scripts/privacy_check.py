@@ -22,6 +22,7 @@ tests/test_privacy_check.py runs the file scan over the repository, so a
 leaked identifier fails the suite; CI runs the commit check on pull requests.
 """
 import argparse
+import ast
 import re
 import subprocess
 import sys
@@ -74,11 +75,15 @@ PUBLIC_TEXT_SUFFIXES = {".py", ".md", ".txt", ".json", ".yaml", ".yml", ".toml",
                         ".ps1", ".cmd", ".sh", ".proto", ".ini", ".cfg", ".rst", ".html", ".csv"}
 
 # Explicit synthetic fixture values, reviewed alongside any new fixture.
-FAKE_LITERALS = {"", "0", "123456", "1234567890", "1234567" + "89012345",
+FAKE_LITERALS = {"", "0", "123", "123456", "1234567890", "1234567" + "89012345",
                  "8561999" + "90000000", "secret", "hunter2", "legacy-plaintext",
                  "PRIVATE_BROKER_PASSWORD", "BROKER_SECRET", "<password>",
                  "<user_id>", "<serial>", "YOUR_PASSWORD", "YOUR_TOKEN",
                  "fixture-user-id", "fixture-broker-password"}
+UNQUOTED_LITERAL = re.compile(
+    r'''\b(mqtt_password|password|api_key|access_token|refresh_token|user_id|jackery_serial)["']?\s*(?::|=(?!=))\s*([^\s"'#,;{}\[\]()]+)''',
+    re.IGNORECASE,
+)
 SENSITIVE_LITERAL = re.compile(
     r'''\b(mqtt_password|password|api_key|access_token|refresh_token|user_id|jackery_serial)["']?\s*[:=]\s*["']([^"'\r\n]*)["']''',
     re.IGNORECASE,
@@ -86,9 +91,13 @@ SENSITIVE_LITERAL = re.compile(
 TOKEN = re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}|AKIA[A-Z0-9]{16})\b")
 
 
-def findings_in_text(text: str, deny: list[str] = ()) -> list[str]:
+def findings_in_text(text: str, deny: list[str] = (), *, unquoted=True) -> list[str]:
     """Every identifier in ``text`` that is not an allowlisted placeholder."""
     found = []
+    if unquoted:
+        for match in UNQUOTED_LITERAL.finditer(text):
+            if match.group(2) not in FAKE_LITERALS and match.group(2) != "str":
+                found.append(f"sensitive literal in {match.group(1)} (value withheld)")
     for match in SENSITIVE_LITERAL.finditer(text):
         if match.group(2) not in FAKE_LITERALS:
             found.append(f"sensitive literal in {match.group(1)} (value withheld)")
@@ -117,6 +126,46 @@ def findings_in_text(text: str, deny: list[str] = ()) -> list[str]:
         if term.lower() in lowered:
             found.append(f"denied term {term!r}")
     return found
+
+
+def mask_python_expressions(text):
+    """Exclude runtime RHS expressions, retaining literals and comments for screening."""
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return text  # malformed Python gets the conservative text scan
+    lines = text.splitlines(keepends=True)
+    offsets = [0]
+    for line in lines:
+        offsets.append(offsets[-1] + len(line.encode("utf-8")))
+    spans = []
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.keyword)):
+            value = node.value
+            if isinstance(node, ast.Assign) and len(node.targets) > 1:
+                spans.append((offsets[node.lineno - 1] + node.col_offset,
+                              offsets[node.end_lineno - 1] + node.end_col_offset))
+            if value is not None and not isinstance(value, ast.Constant):
+                spans.append((offsets[value.lineno - 1] + value.col_offset,
+                              offsets[value.end_lineno - 1] + value.end_col_offset))
+    data = bytearray(text.encode("utf-8"))
+    for start, end in spans:
+        for index in range(start, end):
+            if data[index] not in (10, 13):
+                data[index] = 32
+    return data.decode("utf-8")
+
+
+def text_findings(text, *, python_source=False, deny=()):
+    masked = mask_python_expressions(text).splitlines() if python_source else None
+    for number, line in enumerate(text.splitlines(), 1):
+        found = findings_in_text(line, deny, unquoted=masked is None)
+        if masked is not None:
+            found += [f"sensitive literal in {match.group(1)} (value withheld)"
+                      for match in UNQUOTED_LITERAL.finditer(masked[number - 1])
+                      if match.group(2) not in FAKE_LITERALS and match.group(2) != "str"]
+        for finding in found:
+            yield number, finding
 
 
 def tracked_files() -> list[Path]:
@@ -154,9 +203,8 @@ def scan_files(files: list[Path], base: Path, deny: list[str] = (), *, strict=Fa
                 problems.append(f"{relative.as_posix()}: binary attachment requires separate review")
             continue
         text = data.decode("utf-8", errors="replace")
-        for number, line in enumerate(text.splitlines(), 1):
-            for finding in findings_in_text(line, deny):
-                problems.append(f"{relative.as_posix()}:{number}: {finding}")
+        for number, finding in text_findings(text, python_source=path.suffix == ".py", deny=deny):
+            problems.append(f"{relative.as_posix()}:{number}: {finding}")
     return problems
 
 

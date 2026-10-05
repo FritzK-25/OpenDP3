@@ -21,15 +21,23 @@ def audit():
         commit, detail = problem.split(":", 1)
         category = "author email" if "author email" in detail else "committer email" if "committer email" in detail else "metadata identifier"
         findings.append({"commit_prefix": commit, "category": category})
+    entries = set()
+    for commit in git("rev-list", "--all").decode("ascii").splitlines():
+        for row in git("ls-tree", "-r", "-z", commit).split(b"\0"):
+            if not row:
+                continue
+            meta, name = row.split(b"\t", 1)
+            _mode, kind, oid = meta.split()
+            if kind == b"blob":
+                entries.add((oid.decode("ascii"), name.decode("utf-8")))
     seen = set()
-    for row in git("rev-list", "--objects", "--all").decode("utf-8").splitlines():
-        oid, _, name = row.partition(" ")
-        if not name or oid in seen or git("cat-file", "-t", oid).strip() != b"blob":
-            continue
-        seen.add(oid)
+    for oid, name in sorted(entries):
         path = Path(name)
         for _finding in privacy_check.findings_in_text(name):
             findings.append({"object": oid, "path": name, "category": "path identifier"})
+        if oid in seen:
+            continue
+        seen.add(oid)
         if path.suffix.lower() in privacy_check.SKIPPED_SUFFIXES:
             findings.append({"object": oid, "path": name, "category": "opaque attachment review"})
             continue
@@ -39,10 +47,9 @@ def audit():
         if b"\0" in data[:8192]:
             findings.append({"object": oid, "path": name, "category": "binary review"})
             continue
-        for number, line in enumerate(data.decode("utf-8", errors="replace").splitlines(), 1):
-            for _finding in privacy_check.findings_in_text(line):
-                findings.append({"object": oid, "path": name, "line": number, "category": "content identifier or secret"})
-    return {"scope": "reachable refs: metadata and distinct file blobs; no issue/release/attachment API audit",
+        for number, _finding in privacy_check.text_findings(data.decode("utf-8", errors="replace"), python_source=path.suffix == ".py"):
+            findings.append({"object": oid, "path": name, "line": number, "category": "content identifier or secret"})
+    return {"scope": "reachable refs: metadata, every historical file path and distinct blobs; no issue/release/attachment API audit",
             "findings": findings}
 
 

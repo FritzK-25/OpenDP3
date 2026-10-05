@@ -32,6 +32,8 @@ def main():
         current = next((rule for rule in existing if rule["name"] == desired["name"]), None)
         if current:
             live = api(f"rulesets/{current['id']}")
+            desired_types = {rule["type"] for rule in desired["rules"]}
+            desired["rules"].extend(rule for rule in live["rules"] if rule["type"] not in desired_types)
             for rule in desired["rules"]:
                 previous = next((item for item in live["rules"] if item["type"] == rule["type"]), None)
                 if previous and "parameters" in previous:
