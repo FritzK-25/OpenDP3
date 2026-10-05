@@ -70,11 +70,30 @@ SKIPPED_SUFFIXES = {".png", ".ico", ".icns", ".jpg", ".jpeg", ".gif", ".exe", ".
 # Licence texts are third-party documents reproduced verbatim.
 SKIPPED_PARTS = {"THIRD_PARTY_LICENSES"}
 SKIPPED_FILES = {"LICENSE"}
+PUBLIC_TEXT_SUFFIXES = {".py", ".md", ".txt", ".json", ".yaml", ".yml", ".toml",
+                        ".ps1", ".cmd", ".sh", ".proto", ".ini", ".cfg", ".rst", ".html", ".csv"}
+
+# Explicit synthetic fixture values, reviewed alongside any new fixture.
+FAKE_LITERALS = {"", "0", "123456", "1234567890", "1234567" + "89012345",
+                 "8561999" + "90000000", "secret", "hunter2", "legacy-plaintext",
+                 "PRIVATE_BROKER_PASSWORD", "BROKER_SECRET", "<password>",
+                 "<user_id>", "<serial>", "YOUR_PASSWORD", "YOUR_TOKEN",
+                 "fixture-user-id", "fixture-broker-password"}
+SENSITIVE_LITERAL = re.compile(
+    r'''\b(mqtt_password|password|api_key|access_token|refresh_token|user_id|jackery_serial)["']?\s*[:=]\s*["']([^"'\r\n]*)["']''',
+    re.IGNORECASE,
+)
+TOKEN = re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{40,}|AKIA[A-Z0-9]{16})\b")
 
 
 def findings_in_text(text: str, deny: list[str] = ()) -> list[str]:
     """Every identifier in ``text`` that is not an allowlisted placeholder."""
     found = []
+    for match in SENSITIVE_LITERAL.finditer(text):
+        if match.group(2) not in FAKE_LITERALS:
+            found.append(f"sensitive literal in {match.group(1)} (value withheld)")
+    if TOKEN.search(text) or ("-----BEGIN " + "PRIVATE KEY-----") in text:
+        found.append("credential material (value withheld)")
     for match in EMAIL.finditer(text):
         if not ALLOWED_EMAIL.fullmatch(match.group()):
             found.append(f"email address {match.group()}")
@@ -108,18 +127,31 @@ def tracked_files() -> list[Path]:
 
 
 def files_under(base: Path) -> list[Path]:
-    return [path for path in sorted(base.rglob("*")) if path.is_file() and ".git" not in path.parts]
+    return [path for path in sorted(base.rglob("*"))
+            if (path.is_file() or path.is_symlink() or path.is_junction()) and ".git" not in path.parts]
 
 
-def scan_files(files: list[Path], base: Path, deny: list[str] = ()) -> list[str]:
+def scan_files(files: list[Path], base: Path, deny: list[str] = (), *, strict=False) -> list[str]:
     problems = []
     for path in files:
         relative = path.relative_to(base)
+        for finding in findings_in_text(relative.as_posix(), deny):
+            problems.append(f"{relative.as_posix()}:path: {finding}")
+        if path.is_symlink() or path.is_junction() or not path.resolve().is_relative_to(base.resolve()):
+            problems.append(f"{relative.as_posix()}: link or escaping path requires review")
+            continue
+        if strict and path.suffix and path.suffix.lower() not in PUBLIC_TEXT_SUFFIXES:
+            problems.append(f"{relative.as_posix()}: opaque attachment requires separate review")
+            continue
         if (path.suffix.lower() in SKIPPED_SUFFIXES or path.name in SKIPPED_FILES
                 or SKIPPED_PARTS.intersection(relative.parts) or not path.is_file()):
+            if strict:
+                problems.append(f"{relative.as_posix()}: excluded attachment requires separate review")
             continue
         data = path.read_bytes()
         if b"\0" in data[:8192]:
+            if strict:
+                problems.append(f"{relative.as_posix()}: binary attachment requires separate review")
             continue
         text = data.decode("utf-8", errors="replace")
         for number, line in enumerate(text.splitlines(), 1):
@@ -164,7 +196,7 @@ def main(argv: list[str] | None = None) -> int:
         problems = commit_problems(args.commits, deny)
     elif args.path:
         base = args.path.resolve()
-        problems = scan_files(files_under(base), base, deny)
+        problems = scan_files(files_under(base), base, deny, strict=True)
     else:
         problems = scan_files(tracked_files(), ROOT, deny)
 

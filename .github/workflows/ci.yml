@@ -78,6 +78,8 @@ jobs:
         env:
           RANGE: ${{ github.event_name == 'pull_request' && format('{0}..{1}', github.event.pull_request.base.sha, github.event.pull_request.head.sha) || format('{0}..{1}', github.event.before, github.sha) }}
         run: python scripts/privacy_check.py --commits "$RANGE"
+      - name: Tracked files pass publication checks
+        run: python scripts/privacy_check.py
 
   # The release build, with the release's pinned environment. Runs here so a
   # broken build or a lockfile/pyproject mismatch shows up before tagging.
@@ -146,3 +148,19 @@ jobs:
         run: |
           echo "home-assistant-image: $RESULT"
           test "$RESULT" = success
+
+  publication-gate:
+    needs: [test, lint, privacy, windows-build, home-assistant-app]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: All publication checks succeeded
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          results = json.loads(os.environ['RESULTS'])
+          assert results and all(job['result'] == 'success' for job in results.values()), results
+          PY

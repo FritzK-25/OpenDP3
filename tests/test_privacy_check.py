@@ -62,6 +62,28 @@ def test_denied_terms_match_case_insensitively():
     assert privacy_check.findings_in_text("sensor.kitchen_power", ["alex_s_office"]) == []
 
 
+@pytest.mark.parametrize("key,value", [
+    ("mqtt_password", "review" + "-credential-9xQ"),
+    ("user_id", "98765" + "4321"),
+    ("jackery_serial", "987654" + "321098765"),
+    ("access_token", "review" + "-token-9xQ"),
+])
+def test_sensitive_literal_assignments_are_rejected_without_echoing_values(key, value):
+    problems = privacy_check.findings_in_text(f'{key} = "{value}"')
+    assert problems
+    assert all(value not in problem for problem in problems)
+
+
+def test_private_filename_is_scanned_even_when_content_is_generic(tmp_path):
+    (tmp_path / "private-room.txt").write_text("generic", "utf-8")
+    assert privacy_check.scan_files(privacy_check.files_under(tmp_path), tmp_path, ["private-room"])
+
+
+def test_binary_publication_requires_review(tmp_path):
+    (tmp_path / "capture.zip").write_bytes(b"opaque")
+    assert privacy_check.main(["--path", str(tmp_path)]) == 1
+
+
 def test_deny_file_skips_comments_and_blank_lines(tmp_path):
     deny = tmp_path / "deny.txt"
     deny.write_text("# private terms\n\nalex\n  garage  \n", "utf-8")

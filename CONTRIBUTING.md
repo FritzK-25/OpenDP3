@@ -26,6 +26,22 @@ bug reports with a minimal description, and fixes with a test.
 
 ## Development
 
+Before publishing, run `python scripts/privacy_check.py` and inspect the diff,
+commit metadata, and attachments. Sensitive literal values are rejected except
+explicit synthetic fixtures. `--path DIR` is a strict publication scan: opaque
+attachments and excluded license files require separate review rather than a
+claim that their content was scanned. Keep private deny lists outside this repo.
+
+For an existing project's exposure, run
+`python scripts/audit_history.py --output <private-report-path>` from a full
+clone. The redacted report remains local. It inventories reachable metadata and
+file blobs, not GitHub discussions or release assets. Revoke exposed credentials
+before considering a separately approved history repair; don't rewrite release
+commits that downstream installations use for recovery.
+
+See [sharing installation lessons](docs/LESSONS.md) for moving private findings
+into generic documentation and synthetic regression tests.
+
 ```bash
 python -m venv .venv
 .venv/bin/pip install -e ".[test,test-gui]"     # Windows: .venv\Scripts\pip
