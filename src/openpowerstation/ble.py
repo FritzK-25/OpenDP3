@@ -9,8 +9,9 @@ import hashlib
 import time
 import sys
 
-import ecdsa
 from bleak import BleakClient, BleakScanner
+
+from .ecdh import EphemeralKey
 
 from .protocol import (AuthenticationError, CredentialsRejected, Identity, OutboundGate,
                        ProtocolError, WireBuffer, auth_packet, control_packet,
@@ -288,13 +289,15 @@ class Session:
         if kind == 7:
             simple = WireBuffer(7, simple=True)
             self.gate.stage = "ecdh"
-            private = ecdsa.SigningKey.generate(curve=ecdsa.SECP160r1)
-            await self._write(command=b"\x01\x00" + private.get_verifying_key().to_string())
-            response = await self._simple_response(simple)
-            if len(response) < 43 or response[0] != 1 or response[1] != 0 or response[2] not in (0, 5):
-                raise AuthenticationError("Unsupported ECDH response.")
-            public = ecdsa.VerifyingKey.from_string(response[3:43], curve=ecdsa.SECP160r1)
-            shared = ecdsa.ECDH(ecdsa.SECP160r1, private, public).generate_sharedsecret_bytes()
+            with EphemeralKey() as private:
+                await self._write(command=b"\x01\x00" + private.public_bytes())
+                response = await self._simple_response(simple)
+                if len(response) < 43 or response[0] != 1 or response[1] != 0 or response[2] not in (0, 5):
+                    raise AuthenticationError("Unsupported ECDH response.")
+                try:
+                    shared = private.exchange(response[3:43])
+                except ValueError:
+                    raise AuthenticationError("Invalid ECDH peer point.") from None
             encryption = Type7Encryption(shared[:16], hashlib.md5(shared).digest())
             self.gate.stage = "key"
             await self._write(command=b"\x02")

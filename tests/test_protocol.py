@@ -2,8 +2,9 @@ import hashlib
 import struct
 from types import SimpleNamespace
 
-import ecdsa
 import pytest
+
+from openpowerstation.ecdh import EphemeralKey
 
 from openpowerstation.protocol import (OutboundGate,PolicyError,ProtocolError,WireBuffer,
     parse_packet,auth_packet,identify,derive_session_key,Identity,AuthenticationError)
@@ -182,7 +183,7 @@ def test_advertisement_truncation_and_family():
     assert identify("AA",{0xB5B5:b"\x13"}) is None
 
 @pytest.mark.parametrize("seed", [b"\1\1", b"\0\0"])
-async def test_full_type7_auth_with_mock_device(packet, seed):
+async def test_full_type7_auth_with_mock_device(packet, seed, request):
     """Both ends compute ECDH; auth notifications are split and no real BLE is used."""
     from openpowerstation.ble import Session
     identity = Identity("AA:BB:CC:DD:EE:FF","MR51123456789012",7,0x13)
@@ -190,7 +191,8 @@ async def test_full_type7_auth_with_mock_device(packet, seed):
     encryption = None
     commands = []
     srand = b"r"*16
-    private = ecdsa.SigningKey.generate(curve=ecdsa.SECP160r1)
+    private = EphemeralKey()
+    request.addfinalizer(private.close)
     def respond(raw):
         # Splitting the prefix and every subsequent byte tests arrival buffering.
         for byte in raw: s.receive(None,bytes([byte]))
@@ -202,10 +204,9 @@ async def test_full_type7_auth_with_mock_device(packet, seed):
                 payload = (await buf.feed(raw))[0]
                 commands.append(payload[:1])
                 if payload[0] == 1:
-                    public = ecdsa.VerifyingKey.from_string(payload[2:],curve=ecdsa.SECP160r1)
-                    shared = ecdsa.ECDH(ecdsa.SECP160r1,private,public).generate_sharedsecret_bytes()
+                    shared = private.exchange(payload[2:])
                     encryption = Type7Encryption(shared[:16],hashlib.md5(shared).digest())
-                    respond(SimplePacketAssembler.encode(b"\1\0\0"+private.get_verifying_key().to_string()))
+                    respond(SimplePacketAssembler.encode(b"\1\0\0"+private.public_bytes()))
                 else:
                     encrypted = await encryption.encrypt(srand+seed)
                     respond(SimplePacketAssembler.encode(b"\2"+encrypted))

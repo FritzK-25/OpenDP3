@@ -126,6 +126,9 @@ jobs:
             opendp3-app:ci python -c "
           import json, openpowerstation, openpowerstation.cli, openpowerstation.bridge, openpowerstation.jackery_bridge, openpowerstation.recorder
           import run, linux_worker, bluetooth_status
+          from openpowerstation.ecdh import EphemeralKey
+          with EphemeralKey() as ours, EphemeralKey() as theirs:
+              assert ours.exchange(theirs.public_bytes()) == theirs.exchange(ours.public_bytes())
           provenance = json.load(open('/opt/opendp3/SOURCE-PROVENANCE.json'))
           assert provenance['version'] == openpowerstation.__version__, provenance
           import os, platform

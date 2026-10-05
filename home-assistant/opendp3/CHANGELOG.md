@@ -1,3 +1,12 @@
+# Unreleased
+
+- Replace the affected python-ecdsa dependency with native OpenSSL 3 for the
+  DP3's ephemeral secp160r1 handshake, preserving its wire format and rejecting
+  invalid peer points. There is no vulnerable fallback. Qualify the new runtime
+  against live devices before production promotion.
+- Authenticate release candidates and require complete publication checks;
+  reject private identifiers and credentials before contribution/publication.
+
 # 0.3.0
 
 - The project is now OpenPowerstation. The app slug, MQTT topics, unique IDs
