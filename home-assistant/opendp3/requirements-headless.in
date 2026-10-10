@@ -8,9 +8,9 @@
 #
 # Run it on Linux with Python 3.12, the image's platform.
 bleak==3.0.2
-pycryptodome==3.23.0
+pycryptodome==3.24.0
 protobuf==7.36.2
-platformdirs==4.12.2
+platformdirs==4.12.3
 portalocker==4.4.0
 httpx==0.28.1
 paho-mqtt==2.1.0
